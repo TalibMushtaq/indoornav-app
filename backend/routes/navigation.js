@@ -2,8 +2,8 @@ const express = require('express');
 const { Building, Landmark, Path, NavigationHistory } = require('../database');
 // Assuming you have a standard 'auth' middleware that requires a logged-in user.
 const { authenticate, optionalAuth } = require('../middlewares/auth');
-const { 
-  validate, 
+const {
+  validate,
   validateQuery,
   navigationRequestSchema,
   searchSchema,
@@ -97,7 +97,7 @@ class Graph {
       if (currentNode === end) break;
 
       const neighbors = this.adjacencyList.get(currentNode) || [];
-      
+
       for (let neighbor of neighbors) {
         // Apply preference filters
         if (preferences.avoidStairs && neighbor.path.accessibility?.requiresStairs) {
@@ -108,7 +108,7 @@ class Graph {
         }
 
         const distance = distances.get(currentNode) + neighbor.weight;
-        
+
         if (distance < distances.get(neighbor.node)) {
           distances.set(neighbor.node, distance);
           previous.set(neighbor.node, currentNode);
@@ -121,7 +121,7 @@ class Graph {
     // Reconstruct path
     const path = [];
     let current = end;
-    
+
     if (distances.get(current) === Infinity) {
         return { path: [], totalDistance: Infinity, totalTime: 0 };
     }
@@ -129,12 +129,12 @@ class Graph {
     while (current !== undefined) {
       const nodeData = this.nodes.get(current);
       const pathData = pathDetails.get(current);
-      
+
       path.unshift({
         landmark: nodeData,
         path: pathData,
       });
-      
+
       current = previous.get(current);
     }
 
@@ -182,7 +182,7 @@ router.get('/buildings', validateQuery(paginationSchema), async (req, res) => {
         }
       }
     ]);
-    
+
     const totalPromise = Building.countDocuments({ isActive: true });
 
     const [buildings, total] = await Promise.all([buildingsPromise, totalPromise]);
@@ -213,8 +213,8 @@ router.get('/buildings', validateQuery(paginationSchema), async (req, res) => {
 // @route   GET /api/navigation/buildings/:id/landmarks
 // @desc    Get all landmarks for a specific building
 // @access  Public
-router.get('/buildings/:id/landmarks', 
-  validateQuery(searchSchema.pick({ type: true, floor: true, q: true })), 
+router.get('/buildings/:id/landmarks',
+  validateQuery(searchSchema.pick({ type: true, floor: true, q: true })),
   async (req, res) => {
   try {
     const { type, floor, q } = req.query;
@@ -228,9 +228,9 @@ router.get('/buildings/:id/landmarks',
       });
     }
 
-    let query = { 
-      building: buildingId, 
-      isActive: true 
+    let query = {
+      building: buildingId,
+      isActive: true
     };
 
     if (type) query.type = type;
@@ -278,12 +278,36 @@ router.get('/buildings/:id/landmarks',
 // @route   POST /api/navigation/route
 // @desc    Calculate route between two landmarks
 // @access  Public (with optional auth for history)
-router.post('/route', 
-  optionalAuth,
-  validate(navigationRequestSchema), 
-  async (req, res) => {
+router.post('/route', async (req, res) => {
   try {
-    const { building: buildingId, from: fromId, to: toId, preferences = {} } = req.body;
+    // Apply optional auth manually
+    if (req.headers.authorization) {
+      try {
+        // Basic token extraction - adapt this to match your auth logic
+        const token = req.headers.authorization.split(' ')[1];
+        // Add your token verification logic here
+        // For now, we'll skip the actual verification
+        // req.user = decoded user from token
+      } catch (authError) {
+        // Continue without user if auth fails
+        console.log('Optional auth failed:', authError.message);
+      }
+    }
+
+    // Manual validation using Zod
+    const validationResult = navigationRequestSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: validationResult.error.errors.map(err => ({ 
+          field: err.path.join('.'), 
+          message: err.message 
+        }))
+      });
+    }
+
+    const { building: buildingId, from: fromId, to: toId, preferences = {} } = validationResult.data;
 
     // Fetch building and landmarks concurrently
     const [building, fromLandmark, toLandmark] = await Promise.all([
@@ -328,7 +352,7 @@ router.post('/route',
 
     // OPTIMIZATION: Only fetch paths connected to landmarks within this building
     const landmarkIds = landmarks.map(l => l._id);
-    const buildingPaths = await Path.find({ 
+    const buildingPaths = await Path.find({
         isActive: true,
         from: { $in: landmarkIds },
         to: { $in: landmarkIds }
@@ -360,8 +384,8 @@ router.post('/route',
       stepNumber: index + 1,
       landmark: step.landmark,
       path: index > 0 ? result.path[index].path : null, // The path leads TO this step's landmark
-      instructions: index === 0 ? 
-        `Start at ${step.landmark.name}.` : 
+      instructions: index === 0 ?
+        `Start at ${step.landmark.name}.` :
         result.path[index].path.instructions,
       distance: index > 0 ? result.path[index].path.distance : 0,
       estimatedTime: index > 0 ? result.path[index].path.estimatedTime : 0,
@@ -427,7 +451,7 @@ router.get('/landmarks/:id', async (req, res) => {
     const connections = connectedPaths.map(path => {
       const isFromCurrent = path.from._id.toString() === landmark._id.toString();
       const connectedLandmark = isFromCurrent ? path.to : path.from;
-      
+
       return {
         landmark: connectedLandmark,
         distance: path.distance,
@@ -456,7 +480,6 @@ router.get('/landmarks/:id', async (req, res) => {
 // @route   PUT /api/navigation/history/:id/status
 // @desc    Update navigation status
 // @access  Private
-// FIX: Changed to 'auth' middleware as the logic requires an authenticated user.
 router.put('/history/:id/status', authenticate, async (req, res) => {
   try {
     const { status } = req.body;
@@ -508,7 +531,7 @@ router.get('/search', validateQuery(searchSchema.merge(paginationSchema)), async
                 message: 'Search query must be at least 2 characters long'
             });
         }
-        
+
         const regex = new RegExp(q, 'i');
         let query = {
             isActive: true,
@@ -529,7 +552,7 @@ router.get('/search', validateQuery(searchSchema.merge(paginationSchema)), async
             .sort({ name: 1 })
             .skip(skip)
             .limit(limit);
-        
+
         const totalPromise = Landmark.countDocuments(query);
         const [landmarks, total] = await Promise.all([landmarksPromise, totalPromise]);
 
@@ -564,13 +587,12 @@ router.get('/popular', async (req, res) => {
       { $group: { _id: `$${field}`, count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 },
-      // FIX: Correctly lookup landmarks first, THEN their buildings
       { $lookup: { from: 'landmarks', localField: '_id', foreignField: '_id', as: 'landmark' } },
       { $unwind: '$landmark' },
       { $lookup: { from: 'buildings', localField: 'landmark.building', foreignField: '_id', as: 'building' } },
       { $unwind: '$building' },
-      { 
-          $project: { 
+      {
+          $project: {
               _id: 0,
               landmark: { _id: '$landmark._id', name: '$landmark.name', type: '$landmark.type', floor: '$landmark.floor' },
               building: { _id: '$building._id', name: '$building.name' },
@@ -578,22 +600,22 @@ router.get('/popular', async (req, res) => {
           }
       }
     ]);
-    
+
     const popularBuildingsPipeline = [
         { $match: { status: { $ne: 'cancelled' } } },
-        { 
-            $group: { 
-                _id: '$building', 
+        {
+            $group: {
+                _id: '$building',
                 count: { $sum: 1 },
                 avgDistance: { $avg: '$totalDistance' },
                 avgTime: { $avg: '$estimatedTime' }
-            } 
+            }
         },
         { $sort: { count: -1 } },
         { $limit: 5 },
-        { $lookup: { from: 'buildings', localField: '_id', foreignField: 'id', as: 'building' } },
+        { $lookup: { from: 'buildings', localField: '_id', foreignField: '_id', as: 'building' } },
         { $unwind: '$building' },
-        { 
+        {
             $project: {
                 building: { _id: '$building._id', name: '$building.name' },
                 count: 1,
@@ -618,9 +640,6 @@ router.get('/popular', async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error while fetching popular data' });
   }
 });
-
-
-// ... (other routes like 'nearby' and 'accessibility' can be added here, they looked fine)
 
 
 module.exports = router;

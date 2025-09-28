@@ -1,20 +1,20 @@
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-const { User } = require('../database');
+const { Admin } = require('../database');
 
 // Rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
+  max: 10,
   message: {
     success: false,
-    message: 'Too many authentication attempts, please try again later'
+    message: 'Too many authentication attempts from this IP, please try again after 15 minutes'
   },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Verify JWT token
+// Verify JWT token for authenticated admins
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.header('Authorization');
@@ -22,134 +22,69 @@ const authenticate = async (req, res, next) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
-        message: 'No token provided, authorization denied'
+        message: 'Authorization denied. No token provided.'
       });
     }
 
     const token = authHeader.replace('Bearer ', '');
     
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'No token provided, authorization denied'
-      });
-    }
-
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
+    const admin = await Admin.findById(decoded.id).select('-password');
     
-    if (!user) {
+    if (!admin) {
       return res.status(401).json({
         success: false,
-        message: 'Token is not valid - user not found'
+        message: 'Authorization denied. Admin not found.'
       });
     }
 
-    if (!user.isActive) {
-      return res.status(401).json({
+    if (!admin.isActive) {
+      return res.status(403).json({
         success: false,
-        message: 'Account is deactivated'
+        message: 'Access denied. Your account has been deactivated.'
       });
     }
 
-    // Update last activity timestamp
-    user.lastActive = new Date();
-    await user.save({ validateBeforeSave: false });
-
-    req.user = user;
+    req.user = admin; // Attach admin to the request object
     next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
+    console.error('Auth middleware error:', error.name, error.message);
     
     if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid token'
-      });
+      return res.status(401).json({ success: false, message: 'Invalid token.' });
     }
     
     if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        success: false,
-        message: 'Token expired'
-      });
+      return res.status(401).json({ success: false, message: 'Your session has expired. Please log in again.' });
     }
 
-    res.status(500).json({
-      success: false,
-      message: 'Server error during authentication'
-    });
+    res.status(500).json({ success: false, message: 'Server error during authentication.' });
   }
 };
 
-// Check if user is admin
-const requireAdmin = async (req, res, next) => {
-  try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Admin privileges required'
-      });
+// Check if the authenticated user is an admin
+const requireAdmin = (req, res, next) => {
+    if (req.user && req.user.role === 'admin') {
+        next();
+    } else {
+        res.status(403).json({
+            success: false,
+            message: 'Access denied. Admin privileges required.'
+        });
     }
-    next();
-  } catch (error) {
-    console.error('Admin middleware error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-};
-
-// Optional authentication (for guest users)
-const optionalAuth = async (req, res, next) => {
-  try {
-    const authHeader = req.header('Authorization');
-    
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '');
-      
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.id).select('-password');
-        
-        if (user && user.isActive) {
-          req.user = user;
-        }
-      } catch (error) {
-        // Token is invalid, but that's okay for optional auth
-        console.log('Optional auth - invalid token:', error.message);
-      }
-    }
-    
-    next();
-  } catch (error) {
-    console.error('Optional auth middleware error:', error);
-    next();
-  }
 };
 
 // Generate JWT token
-const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || '30d'
+const generateToken = (id, name, role) => {
+  return jwt.sign({ id, name, role }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE || '1d'
   });
 };
 
-// Verify token without middleware (utility function)
-const verifyToken = (token) => {
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET);
-  } catch (error) {
-    return null;
-  }
-};
 
 module.exports = {
   authenticate,
   requireAdmin,
-  optionalAuth,
   generateToken,
-  verifyToken,
   authLimiter
 };

@@ -11,9 +11,9 @@ const { connectDB } = require('./database');
 const { checkS3Connection } = require('./middlewares/awsupload');
 
 // Routes
-const userRoutes = require('./routes/user');
 const adminRoutes = require('./routes/admin');
 const navigationRoutes = require('./routes/navigation');
+const visitorRoutes = require('./routes/visitor'); // <-- IMPORT NEW VISITOR ROUTES
 
 // Error handler
 const errorHandler = require('./middlewares/errorHandler');
@@ -55,9 +55,9 @@ app.use((req, res, next) => { /* ... existing code ... */ });
 app.get('/health', (req, res) => { /* ... existing code ... */ });
 
 // API routes
-app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/navigation', navigationRoutes);
+app.use('/api/visitors', visitorRoutes); // <-- USE NEW VISITOR ROUTES
 
 // API documentation endpoint
 app.get('/api', (req, res) => { /* ... existing code ... */ });
@@ -67,7 +67,7 @@ app.use('/api', (req, res) => {
   res.status(404).json({
     success: false,
     message: 'API endpoint not found',
-    availableEndpoints: ['/api/user', '/api/navigation', '/api/admin']
+    availableEndpoints: ['/api/navigation', '/api/admin', '/api/visitors'] // <-- UPDATED 404 MESSAGE
   });
 });
 
