@@ -1,10 +1,32 @@
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const { User } = require('../database');
+
+// Rate limiting for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 requests per windowMs
+  message: {
+    success: false,
+    message: 'Too many authentication attempts, please try again later'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Verify JWT token
 const authenticate = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    const authHeader = req.header('Authorization');
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'No token provided, authorization denied'
+      });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
     
     if (!token) {
       return res.status(401).json({
@@ -19,7 +41,7 @@ const authenticate = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Token is not valid'
+        message: 'Token is not valid - user not found'
       });
     }
 
@@ -30,13 +52,32 @@ const authenticate = async (req, res, next) => {
       });
     }
 
+    // Update last activity timestamp
+    user.lastActive = new Date();
+    await user.save({ validateBeforeSave: false });
+
     req.user = user;
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);
-    res.status(401).json({
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid token'
+      });
+    }
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        message: 'Token expired'
+      });
+    }
+
+    res.status(500).json({
       success: false,
-      message: 'Token is not valid'
+      message: 'Server error during authentication'
     });
   }
 };
@@ -63,9 +104,11 @@ const requireAdmin = async (req, res, next) => {
 // Optional authentication (for guest users)
 const optionalAuth = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    const authHeader = req.header('Authorization');
     
-    if (token) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '');
+      
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const user = await User.findById(decoded.id).select('-password');
@@ -89,7 +132,7 @@ const optionalAuth = async (req, res, next) => {
 // Generate JWT token
 const generateToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE
+    expiresIn: process.env.JWT_EXPIRE || '30d'
   });
 };
 
@@ -107,5 +150,6 @@ module.exports = {
   requireAdmin,
   optionalAuth,
   generateToken,
-  verifyToken
+  verifyToken,
+  authLimiter
 };

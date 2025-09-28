@@ -4,7 +4,10 @@ const bcrypt = require('bcryptjs');
 // Connect to MongoDB
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI);
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error('Database connection error:', error);
@@ -39,6 +42,10 @@ const userSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  lastActive: {
+    type: Date,
+    default: Date.now
   }
 }, {
   timestamps: true
@@ -47,7 +54,7 @@ const userSchema = new mongoose.Schema({
 // Hash password before saving
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
-  this.password = await bcrypt.hash(this.password, 10);
+  this.password = await bcrypt.hash(this.password, 12);
   next();
 });
 
@@ -295,6 +302,9 @@ const navigationHistorySchema = new mongoose.Schema({
     enum: ['started', 'in_progress', 'completed', 'cancelled'],
     default: 'started'
   },
+  completedAt: {
+    type: Date
+  },
   feedback: {
     rating: {
       type: Number,
@@ -308,12 +318,27 @@ const navigationHistorySchema = new mongoose.Schema({
 });
 
 // Create indexes for better performance
-userSchema.index({ email: 1 });
+userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ isActive: 1 });
+userSchema.index({ createdAt: -1 });
+
+buildingSchema.index({ isActive: 1 });
+buildingSchema.index({ name: 'text', description: 'text' });
+buildingSchema.index({ createdAt: -1 });
+
 landmarkSchema.index({ building: 1, floor: 1 });
 landmarkSchema.index({ coordinates: 1 });
+landmarkSchema.index({ isActive: 1 });
+landmarkSchema.index({ name: 'text', description: 'text', roomNumber: 'text' });
+
 pathSchema.index({ from: 1, to: 1 });
+pathSchema.index({ isActive: 1 });
+pathSchema.index({ 'accessibility.wheelchairAccessible': 1 });
+
 navigationHistorySchema.index({ user: 1, createdAt: -1 });
 navigationHistorySchema.index({ building: 1, createdAt: -1 });
+navigationHistorySchema.index({ sessionId: 1 });
+navigationHistorySchema.index({ status: 1 });
 
 // Create models
 const User = mongoose.model('User', userSchema);
