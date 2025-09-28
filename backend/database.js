@@ -1,19 +1,40 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-// Connect to MongoDB
-const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
-  } catch (error) {
-    console.error('Database connection error:', error);
-    process.exit(1);
+// --- Updated MongoDB Connection Logic ---
+const connectDB = async (retries = 5) => {
+  // Listen for connection events
+  mongoose.connection.on('connected', () => console.log('✅ MongoDB connected successfully.'));
+  mongoose.connection.on('error', err => console.error('❌ MongoDB connection error:', err));
+  mongoose.connection.on('disconnected', () => console.log('🟡 MongoDB disconnected.'));
+
+  while (retries > 0) {
+    try {
+      if (!process.env.MONGODB_URI) {
+        throw new Error('MONGODB_URI is not defined in your .env file.');
+      }
+      console.log('Attempting to connect to MongoDB...');
+      await mongoose.connect(process.env.MONGODB_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
+      });
+      return; // Successful connection
+    } catch (error) {
+      console.error(`Database connection error (retries left: ${retries - 1}):`, error.message);
+      retries--;
+      if (retries > 0) {
+        // Wait 5 seconds before trying again
+        await new Promise(res => setTimeout(res, 5000));
+      } else {
+        console.error('Fatal: Could not connect to the database after multiple retries.');
+        process.exit(1);
+      }
+    }
   }
 };
+
+// ... (the rest of your database.js file remains the same)
 
 // User Schema
 const userSchema = new mongoose.Schema({
@@ -318,7 +339,6 @@ const navigationHistorySchema = new mongoose.Schema({
 });
 
 // Create indexes for better performance
-userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ isActive: 1 });
 userSchema.index({ createdAt: -1 });
 

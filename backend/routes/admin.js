@@ -1,7 +1,7 @@
 const express = require('express');
 const { User, Building, Landmark, Path, NavigationHistory } = require('../database');
 const { authenticate, requireAdmin } = require('../middlewares/auth');
-const upload = require('../middlewares/awsupload'); // Assuming your file is named awsupload.js
+const { upload } = require('../middlewares/awsupload'); // Assuming your file is named awsupload.js
 const { 
   validate, 
   validateQuery,

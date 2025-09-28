@@ -1,7 +1,7 @@
 const express = require('express');
 const { Building, Landmark, Path, NavigationHistory } = require('../database');
 // Assuming you have a standard 'auth' middleware that requires a logged-in user.
-const { auth, optionalAuth } = require('../middlewares/auth');
+const { authenticate, optionalAuth } = require('../middlewares/auth');
 const { 
   validate, 
   validateQuery,
@@ -457,7 +457,7 @@ router.get('/landmarks/:id', async (req, res) => {
 // @desc    Update navigation status
 // @access  Private
 // FIX: Changed to 'auth' middleware as the logic requires an authenticated user.
-router.put('/history/:id/status', auth, async (req, res) => {
+router.put('/history/:id/status', authenticate, async (req, res) => {
   try {
     const { status } = req.body;
     const navigationId = req.params.id;

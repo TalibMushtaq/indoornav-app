@@ -1,16 +1,32 @@
 
-// middlewares/upload.js
+// middlewares/awsupload.js
 
-const { S3Client } = require('@aws-sdk/client-s3');
+const { S3Client, ListBucketsCommand } = require('@aws-sdk/client-s3');
 const multer = require('multer');
 const multerS3 = require('multer-s3');
 const path = require('path');
 
 // Configure the AWS S3 Client
-// The SDK will automatically pick up your credentials from process.env
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION
+  region: process.env.AWS_REGION,
 });
+
+// --- New S3 Connection Check Function ---
+const checkS3Connection = async () => {
+  try {
+    if (!process.env.AWS_BUCKET_NAME || !process.env.AWS_REGION) {
+      throw new Error('AWS_BUCKET_NAME and AWS_REGION must be defined in your .env file.');
+    }
+    console.log('Checking AWS S3 connection...');
+    await s3Client.send(new ListBucketsCommand({}));
+    console.log('✅ AWS S3 connection successful.');
+  } catch (error) {
+    console.error('❌ AWS S3 Connection Error: Could not connect to S3.');
+    console.error('Please check your AWS credentials and bucket configuration in the .env file.');
+    console.error('Error details:', error.message);
+    process.exit(1);
+  }
+};
 
 // Create the multer-s3 storage engine
 const s3Storage = multerS3({
@@ -54,4 +70,4 @@ const upload = multer({
   }
 });
 
-module.exports = upload;
+module.exports = { upload, checkS3Connection };
