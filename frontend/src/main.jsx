@@ -2,16 +2,16 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
+import { BrowserRouter } from 'react-router-dom';
 
-// Error boundary component for better error handling
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(error) {
-    return { hasError: true, error };
+    return { hasError: true };
   }
 
   componentDidCatch(error, errorInfo) {
@@ -43,13 +43,12 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Create root and render the app
-const root = ReactDOM.createRoot(document.getElementById('root'));
-
-root.render(
+ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
+    <BrowserRouter>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </BrowserRouter>
   </React.StrictMode>
-);
+)
