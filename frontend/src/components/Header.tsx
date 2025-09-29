@@ -1,7 +1,11 @@
+
+
 import { useState } from "react";
-import { Menu, X, MapPin } from "lucide-react";
+import { Link } from "react-router-dom"; // Use Link for better navigation
+import { Menu, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator"; // Import Separator
 
 const Header = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -13,8 +17,14 @@ const Header = () => {
   ];
 
   const scrollToSection = (href: string) => {
-    const element = document.querySelector(href);
-    element?.scrollIntoView({ behavior: "smooth" });
+    // Only scroll if on the homepage
+    if (window.location.pathname === "/") {
+      const element = document.querySelector(href);
+      element?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      // If on another page, navigate to homepage first
+      window.location.href = `/${href}`;
+    }
     setIsOpen(false);
   };
 
@@ -22,22 +32,35 @@ const Header = () => {
     <header className="fixed top-0 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border z-50">
       <nav className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo */}
-        <div className="flex items-center space-x-2">
+        <Link to="/" className="flex items-center space-x-2">
           <MapPin className="h-8 w-8 text-primary" />
           <span className="text-xl font-bold text-foreground">NaviGuide</span>
-        </div>
+        </Link>
 
         {/* Desktop Navigation */}
-        <div className="hidden md:flex items-center space-x-8">
-          {navItems.map((item) => (
-            <button
-              key={item.name}
-              onClick={() => scrollToSection(item.href)}
-              className="text-foreground hover:text-primary transition-colors"
-            >
-              {item.name}
-            </button>
-          ))}
+        <div className="hidden md:flex items-center space-x-6">
+          <div className="flex items-center space-x-6">
+            {navItems.map((item) => (
+              <button
+                key={item.name}
+                onClick={() => scrollToSection(item.href)}
+                className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          <div className="flex items-center space-x-2">
+            <Button asChild variant="ghost">
+              <Link to="/admin/login">Admin Login</Link>
+            </Button>
+            <Button asChild>
+              <Link to="/admin/signup">Admin Sign Up</Link>
+            </Button>
+          </div>
         </div>
 
         {/* Mobile Menu */}
@@ -66,25 +89,15 @@ const Header = () => {
               <div className="border-t border-border pt-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4">Admin Access</h3>
                 <div className="space-y-3">
-                  <Button 
-                    variant="outline" 
-                    className="w-full justify-start"
-                    onClick={() => {
-                      window.location.href = "/admin/login";
-                      setIsOpen(false);
-                    }}
-                  >
-                    Admin Login
+                  <Button asChild variant="outline" className="w-full justify-start">
+                    <Link to="/admin/login" onClick={() => setIsOpen(false)}>
+                      Admin Login
+                    </Link>
                   </Button>
-                  <Button 
-                    variant="default" 
-                    className="w-full justify-start"
-                    onClick={() => {
-                      window.location.href = "/admin/signup";
-                      setIsOpen(false);
-                    }}
-                  >
-                    Admin Sign Up
+                  <Button asChild variant="default" className="w-full justify-start">
+                    <Link to="/admin/signup" onClick={() => setIsOpen(false)}>
+                      Admin Sign Up
+                    </Link>
                   </Button>
                 </div>
               </div>

@@ -26,6 +26,15 @@ const adminSigninSchema = z.object({
   password: z.string().min(1, 'Password is required')
 });
 
+// --- Feedback Schema ---
+const feedbackSchema = z.object({
+  firstName: z.string().min(1, 'First name is required').max(50).trim(),
+  lastName: z.string().min(1, 'Last name is required').max(50).trim(),
+  email: z.string().email('A valid email is required').toLowerCase().trim(),
+  subject: z.string().min(5, 'Subject must be at least 5 characters').max(100).trim(),
+  message: z.string().min(10, 'Message must be at least 10 characters').max(1000).trim(),
+});
+
 // --- Building Schemas ---
 const buildingSchema = z.object({
   name: z.string().min(2, 'Building name must be at least 2 characters').max(100, 'Building name must be less than 100 characters').trim(),
@@ -189,6 +198,7 @@ const validateParams = (schema) => (req, res, next) => {
 
 module.exports = {
   adminSignupSchema, adminSigninSchema,
+  feedbackSchema,
   buildingSchema, buildingUpdateSchema,
   landmarkSchema, landmarkUpdateSchema,
   pathSchema, pathUpdateSchema,

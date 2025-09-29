@@ -66,6 +66,42 @@ const adminSchema = new mongoose.Schema({
     timestamps: true
 });
 
+
+// --- Feedback Schema ---
+const feedbackSchema = new mongoose.Schema({
+  firstName: {
+    type: String,
+    required: [true, 'First name is required'],
+    trim: true,
+  },
+  lastName: {
+    type: String,
+    required: [true, 'Last name is required'],
+    trim: true,
+  },
+  email: {
+    type: String,
+    required: [true, 'Email is required'],
+    trim: true,
+    lowercase: true,
+  },
+  subject: {
+    type: String,
+    required: [true, 'Subject is required'],
+    trim: true,
+  },
+  message: {
+    type: String,
+    required: [true, 'Message is required'],
+    trim: true,
+  }
+}, {
+  timestamps: true
+});
+
+feedbackSchema.index({ email: 1 });
+
+
 // Middleware to hash password before saving admin
 adminSchema.pre('save', async function(next) {
     if (!this.isModified('password')) {
@@ -183,6 +219,8 @@ const Building = mongoose.model('Building', buildingSchema);
 const Landmark = mongoose.model('Landmark', landmarkSchema);
 const Path = mongoose.model('Path', pathSchema);
 const NavigationHistory = mongoose.model('NavigationHistory', navigationHistorySchema);
+const Feedback = mongoose.model('Feedback', feedbackSchema);
+// --- Export models and connection function ---
 
 module.exports = {
   connectDB,
@@ -191,6 +229,7 @@ module.exports = {
   Building,
   Landmark,
   Path,
-  NavigationHistory
+  NavigationHistory,
+  Feedback
 };
 
