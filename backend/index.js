@@ -14,7 +14,7 @@ const { checkS3Connection } = require('./middlewares/awsupload');
 const adminRoutes = require('./routes/admin');
 const navigationRoutes = require('./routes/navigation');
 const visitorRoutes = require('./routes/visitor');
-const feedbackRoutes = require('./routes/feedback'); // <-- IMPORTED FEEDBACK ROUTES
+const feedbackRoutes = require("./routes/feedback"); 
 
 // Error handler
 const errorHandler = require('./middlewares/errorHandler');
@@ -68,7 +68,7 @@ app.get('/health', (req, res) => {
 app.use('/api/admin', adminRoutes);
 app.use('/api/navigation', navigationRoutes);
 app.use('/api/visitors', visitorRoutes);
-app.use('/api/feedback', feedbackRoutes); // <-- USING FEEDBACK ROUTES
+app.use("/api/feedback", feedbackRoutes);
 
 // API documentation endpoint
 app.get('/api', (req, res) => {
