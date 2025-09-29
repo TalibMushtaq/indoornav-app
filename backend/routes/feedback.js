@@ -3,6 +3,19 @@
 const express = require('express');
 const router = express.Router();
 const { Feedback } = require('../database'); // Make sure this path is correct
+const rateLimit = require('express-rate-limit');
+
+// IP-based rate limiter (unchanged)
+const feedbackLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  message: {
+    success: false,
+    message: 'Too many requests from this IP, please try again after 15 minutes.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * @desc    Submit new feedback from the contact form
@@ -13,7 +26,20 @@ const submitFeedback = async (req, res, next) => {
   try {
     const { firstName, lastName, email, subject, message } = req.body;
 
-    // Create a new feedback entry in the database.
+    // --- New Email Verification Logic ---
+    // 1. Count how many times this email has been used for feedback.
+    const existingFeedbackCount = await Feedback.countDocuments({ email });
+
+    // 2. If the count is 3 or more, block the submission.
+    if (existingFeedbackCount >= 3) {
+      return res.status(429).json({
+        success: false,
+        message: 'You have reached the maximum number of submissions. Thank you for your feedback.',
+      });
+    }
+    // --- End of New Logic ---
+
+    // If the check passes, create the new feedback entry.
     const feedback = await Feedback.create({
       firstName,
       lastName,
@@ -22,21 +48,18 @@ const submitFeedback = async (req, res, next) => {
       message,
     });
 
-    // Send a success response.
     res.status(201).json({
       success: true,
       message: 'Thank you for your feedback! We will get back to you shortly.',
       data: feedback,
     });
-
-  } catch (error) {
-    // Pass any errors to the global error handler.
+  } catch (error)
+ {
     next(error);
   }
 };
 
-// Define the route and attach the handler logic directly
-router.post('/submit', submitFeedback);
+// Apply both the IP rate limiter and the handler logic to the route
+router.post('/submit', feedbackLimiter, submitFeedback);
 
-// Export the configured router
 module.exports = router;

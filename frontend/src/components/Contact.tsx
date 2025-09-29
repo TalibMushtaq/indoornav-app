@@ -1,153 +1,242 @@
+import { useState, useRef } from "react";
+import Autoplay from "embla-carousel-autoplay"; // Plugin for looping
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Mail, Phone, MapPin, Send } from "lucide-react";
+import { Send } from "lucide-react";
+// --- NEW: Carousel component imports ---
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+} from "@/components/ui/carousel";
 
 const Contact = () => {
-  const contactInfo = [
-    {
-      icon: Mail,
-      title: "Email",
-      content: "contact@naviguide.com",
-      description: "Send us an email anytime"
-    },
-    {
-      icon: Phone,
-      title: "Phone",
-      content: "+1 (555) 123-4567",
-      description: "Mon-Fri from 8am to 6pm"
-    },
-    {
-      icon: MapPin,
-      title: "Address",
-      content: "123 Navigation Street, Tech City, TC 12345",
-      description: "Visit our headquarters"
-    }
+  // --- STATE MANAGEMENT ---
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    subject: "",
+    message: "",
+  });
+  const [submissionStatus, setSubmissionStatus] = useState({
+    loading: false,
+    error: "",
+    success: "",
+  });
+
+  // --- Setup for the looping carousel plugin ---
+  const plugin = useRef(Autoplay({ delay: 4000, stopOnInteraction: true }));
+
+  // --- Image URLs for the carousel ---
+  const carouselImages = [
+    "https://ndoornav-app-bucket.s3.ap-south-1.amazonaws.com/indooranav-app-public-assets/contactus.jpg",
+    "https://ndoornav-app-bucket.s3.ap-south-1.amazonaws.com/indooranav-app-public-assets/contactus2.jpg",
+    "https://ndoornav-app-bucket.s3.ap-south-1.amazonaws.com/indooranav-app-public-assets/contactus3.jpg",
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // TODO: Implement form submission
-    console.log("Form submitted");
+  // --- HANDLERS ---
+  const handleChange = (e) => {
+    const { id, value } = e.target;
+    setFormData((prev) => ({ ...prev, [id]: value }));
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmissionStatus({ loading: true, error: "", success: "" });
+    const API_ENDPOINT = `${import.meta.env.VITE_API_URL}/api/feedback/submit`;
+
+    try {
+      const response = await fetch(API_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || "An error occurred.");
+      }
+      setSubmissionStatus({
+        loading: false,
+        error: "",
+        success: result.message,
+      });
+      setFormData({
+        firstName: "",
+        lastName: "",
+        email: "",
+        subject: "",
+        message: "",
+      });
+    } catch (error) {
+      setSubmissionStatus({
+        loading: false,
+        error: error.message,
+        success: "",
+      });
+    }
+  };
+
+  // --- JSX ---
   return (
     <section id="contact" className="py-16 bg-background">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
-            Get In Touch
+        <div className="text-center">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            Get in Touch
           </h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Have questions about NaviGuide? Need help with implementation? We're here to help you navigate your way forward.
+          <p className="mt-4 text-lg leading-8 text-muted-foreground">
+            We're here to help and answer any question you might have.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {/* Contact Information */}
-          <div className="space-y-6">
-            <h3 className="text-2xl font-bold text-foreground mb-6">
-              Contact Information
-            </h3>
-            
-            {contactInfo.map((info, index) => (
-              <Card key={index}>
-                <CardHeader>
-                  <div className="flex items-center space-x-4">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <info.icon className="h-6 w-6 text-primary" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mt-12">
+          {/* --- IMAGE CAROUSEL SECTION --- */}
+          <div className="flex items-center justify-center">
+            <Carousel
+              plugins={[plugin.current]}
+              className="w-full max-w-2xl"
+              onMouseEnter={() => plugin.current.stop()}
+              onMouseLeave={() => plugin.current.reset()}
+            >
+              <CarouselContent>
+                {carouselImages.map((src, index) => (
+                  <CarouselItem key={index}>
+                    <div className="p-1">
+                      <Card className="overflow-hidden">
+                        <CardContent className="flex aspect-video items-center justify-center p-0">
+                          <img
+                            src={src}
+                            alt={`Promotional image ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </CardContent>
+                      </Card>
                     </div>
-                    <div>
-                      <CardTitle className="text-lg">{info.title}</CardTitle>
-                      <CardDescription>{info.description}</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-foreground font-medium">{info.content}</p>
-                </CardContent>
-              </Card>
-            ))}
-
-            {/* Office Hours */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Office Hours</CardTitle>
-                <CardDescription>When our team is available</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Monday - Friday</span>
-                  <span className="text-foreground">8:00 AM - 6:00 PM</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Saturday</span>
-                  <span className="text-foreground">9:00 AM - 3:00 PM</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Sunday</span>
-                  <span className="text-foreground">Closed</span>
-                </div>
-              </CardContent>
-            </Card>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+            </Carousel>
           </div>
 
-          {/* Contact Form */}
+          {/* --- CONTACT FORM --- */}
           <Card>
             <CardHeader>
               <CardTitle>Send us a Message</CardTitle>
               <CardDescription>
-                Fill out the form below and we'll get back to you as soon as possible.
+                Fill out the form below and we'll get back to you as soon as
+                possible.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="firstName" className="block text-sm font-medium text-foreground mb-2">
+                    <label
+                      htmlFor="firstName"
+                      className="block text-sm font-medium text-foreground mb-2"
+                    >
                       First Name
                     </label>
-                    <Input id="firstName" placeholder="John" required />
+                    <Input
+                      id="firstName"
+                      placeholder="John"
+                      required
+                      value={formData.firstName}
+                      onChange={handleChange}
+                    />
                   </div>
                   <div>
-                    <label htmlFor="lastName" className="block text-sm font-medium text-foreground mb-2">
+                    <label
+                      htmlFor="lastName"
+                      className="block text-sm font-medium text-foreground mb-2"
+                    >
                       Last Name
                     </label>
-                    <Input id="lastName" placeholder="Doe" required />
+                    <Input
+                      id="lastName"
+                      placeholder="Doe"
+                      required
+                      value={formData.lastName}
+                      onChange={handleChange}
+                    />
                   </div>
                 </div>
-                
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
+                  <label
+                    htmlFor="email"
+                    className="block text-sm font-medium text-foreground mb-2"
+                  >
                     Email
                   </label>
-                  <Input id="email" type="email" placeholder="john@example.com" required />
-                </div>
-                
-                <div>
-                  <label htmlFor="subject" className="block text-sm font-medium text-foreground mb-2">
-                    Subject
-                  </label>
-                  <Input id="subject" placeholder="How can we help?" required />
-                </div>
-                
-                <div>
-                  <label htmlFor="message" className="block text-sm font-medium text-foreground mb-2">
-                    Message
-                  </label>
-                  <Textarea 
-                    id="message" 
-                    placeholder="Tell us more about your inquiry..." 
-                    className="min-h-[120px]"
-                    required 
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="john@example.com"
+                    required
+                    value={formData.email}
+                    onChange={handleChange}
                   />
                 </div>
-                
-                <Button type="submit" className="w-full">
-                  Send Message
-                  <Send className="ml-2 h-4 w-4" />
+                <div>
+                  <label
+                    htmlFor="subject"
+                    className="block text-sm font-medium text-foreground mb-2"
+                  >
+                    Subject
+                  </label>
+                  <Input
+                    id="subject"
+                    placeholder="How can we help?"
+                    required
+                    value={formData.subject}
+                    onChange={handleChange}
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="message"
+                    className="block text-sm font-medium text-foreground mb-2"
+                  >
+                    Message
+                  </label>
+                  <Textarea
+                    id="message"
+                    placeholder="Tell us more about your inquiry..."
+                    className="min-h-[120px]"
+                    required
+                    value={formData.message}
+                    onChange={handleChange}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={submissionStatus.loading}
+                >
+                  {submissionStatus.loading ? "Sending..." : "Send Message"}
+                  {!submissionStatus.loading && (
+                    <Send className="ml-2 h-4 w-4" />
+                  )}
                 </Button>
+                {submissionStatus.success && (
+                  <p className="text-sm text-green-600 text-center">
+                    {submissionStatus.success}
+                  </p>
+                )}
+                {submissionStatus.error && (
+                  <p className="text-sm text-red-600 text-center">
+                    {submissionStatus.error}
+                  </p>
+                )}
               </form>
             </CardContent>
           </Card>

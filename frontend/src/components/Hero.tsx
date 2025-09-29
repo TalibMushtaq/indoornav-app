@@ -34,13 +34,23 @@ const Hero = () => {
             </Button>
           </div>
           
-          {/* Hero Image Placeholder */}
+          {/* Responsive Hero Image */}
           <div className="mt-12 relative">
-            <div className="bg-muted rounded-lg aspect-video max-w-4xl mx-auto flex items-center justify-center border">
-              <div className="text-center">
-                <Navigation className="h-24 w-24 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground text-lg">Interactive Building Map Preview</p>
-              </div>
+            {/* This new div is the frame with the border and padding */}
+            <div className="max-w-4xl mx-auto border bg-background rounded-lg p-2">
+              <picture>
+                {/* Image for screens 640px and wider (desktop) */}
+                <source
+                  media="(min-width: 640px)"
+                  srcSet="https://ndoornav-app-bucket.s3.ap-south-1.amazonaws.com/indooranav-app-public-assets/heroplaceholder.jpg"
+                />
+                {/* Default image for smaller screens (mobile) */}
+                <img
+                  src="https://ndoornav-app-bucket.s3.ap-south-1.amazonaws.com/indooranav-app-public-assets/heromob.jpg"
+                  alt="Interactive Building Map Preview"
+                  className="rounded-md w-full"
+                />
+              </picture>
             </div>
           </div>
         </div>
