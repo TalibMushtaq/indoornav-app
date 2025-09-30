@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { z } from "zod";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { MapPin, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+// Define the API base URL using the environment variable, with a fallback
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const loginSchema = z.object({
   email: z.string().trim().email({ message: "Invalid email address" }).max(255),
@@ -22,6 +25,7 @@ const AdminLogin = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,21 +35,28 @@ const AdminLogin = () => {
     try {
       const validatedData = loginSchema.parse(formData);
       
-      // TODO: Connect to your backend API
-      // const response = await fetch('/api/admin/signin', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(validatedData)
-      // });
+      const response = await fetch(`${API_BASE_URL}/api/admin/signin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validatedData)
+      });
       
-      console.log("Login attempt:", validatedData);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'An unknown error occurred.');
+      }
       
       toast({
         title: "Login Successful",
-        description: "Redirecting to dashboard..."
+        description: "Redirecting to your dashboard..."
       });
       
-      // TODO: Redirect to admin dashboard
+      if (data.data && data.data.token) {
+          localStorage.setItem('adminToken', data.data.token);
+      }
+      
+      navigate('/admin/dashboard');
       
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -56,10 +67,16 @@ const AdminLogin = () => {
           }
         });
         setErrors(newErrors);
-      } else {
+      } else if (error instanceof Error) {
         toast({
           title: "Login Failed",
-          description: "Invalid credentials. Please try again.",
+          description: error.message,
+          variant: "destructive"
+        });
+      } else {
+         toast({
+          title: "Login Failed",
+          description: "An unexpected error occurred. Please try again.",
           variant: "destructive"
         });
       }
@@ -78,11 +95,10 @@ const AdminLogin = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Back to Home */}
         <Button 
           variant="ghost" 
           className="mb-6"
-          onClick={() => window.history.back()}
+          onClick={() => navigate('/')}
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Home
@@ -110,6 +126,7 @@ const AdminLogin = () => {
                   value={formData.email}
                   onChange={(e) => handleInputChange("email", e.target.value)}
                   className={errors.email ? "border-destructive" : ""}
+                  disabled={isLoading}
                 />
                 {errors.email && (
                   <p className="text-sm text-destructive">{errors.email}</p>
@@ -126,6 +143,7 @@ const AdminLogin = () => {
                     value={formData.password}
                     onChange={(e) => handleInputChange("password", e.target.value)}
                     className={errors.password ? "border-destructive" : ""}
+                    disabled={isLoading}
                   />
                   <Button
                     type="button"
@@ -133,6 +151,7 @@ const AdminLogin = () => {
                     size="sm"
                     className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                     onClick={() => setShowPassword(!showPassword)}
+                    disabled={isLoading}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -146,13 +165,6 @@ const AdminLogin = () => {
                 )}
               </div>
 
-              <Alert>
-                <AlertDescription>
-                  <strong>Note:</strong> This form requires backend connection to function. 
-                  Connect to your API endpoints to enable authentication.
-                </AlertDescription>
-              </Alert>
-
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Signing In..." : "Sign In"}
               </Button>
@@ -161,8 +173,8 @@ const AdminLogin = () => {
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
                 Don't have an account?{" "}
-                <Button variant="link" className="p-0 h-auto font-normal">
-                  Contact administrator
+                <Button variant="link" className="p-0 h-auto font-normal" onClick={() => navigate('/admin/signup')}>
+                  Sign up here
                 </Button>
               </p>
             </div>

@@ -23,14 +23,11 @@ const Hero = () => {
             Our intelligent indoor navigation system helps you find your way through complex buildings with turn-by-turn directions, accessibility options, and real-time guidance.
           </p>
           
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Button size="lg" className="w-full sm:w-auto" onClick={() => window.location.href = "/navigation"}>
-              Start Navigation
+          {/* CTA Button */}
+          <div className="flex justify-center">
+            <Button size="lg" className="w-full sm:w-auto" onClick={() => window.location.href = '/visitor/register'}>
+              Navigate as Visitor
               <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-            <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => window.location.href = "/visitor/register"}>
-              Register as Visitor
             </Button>
           </div>
           

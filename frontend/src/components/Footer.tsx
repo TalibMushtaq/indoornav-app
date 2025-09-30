@@ -1,12 +1,12 @@
-import { MapPin, Mail, Phone, Github, Twitter, Linkedin } from "lucide-react";
+import { MapPin, Mail, Phone, Github, X, Linkedin } from "lucide-react";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
 
   const socialLinks = [
-    { icon: Github, href: "#", label: "GitHub" },
-    { icon: Twitter, href: "#", label: "Twitter" },
-    { icon: Linkedin, href: "#", label: "LinkedIn" },
+    { icon: Github, href: "https://github.com/TalibMushtaq", label: "GitHub" },
+    { icon: X, href: "https://x.com/taalib_mushtaq", label: "X" },
+    { icon: Linkedin, href: "https://www.linkedin.com/in/talib-dar-6a6aa1231", label: "LinkedIn" },
   ];
 
   const footerLinks = [
@@ -46,7 +46,7 @@ const Footer = () => {
             <div className="space-y-2 mb-6">
               <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                 <Mail className="h-4 w-4" />
-                <span>contact@naviguide.com</span>
+                <span>contact@NaviGuide.com</span>
               </div>
               <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                 <Phone className="h-4 w-4" />
@@ -62,6 +62,8 @@ const Footer = () => {
                   href={social.href}
                   className="p-2 bg-background rounded-lg hover:bg-primary hover:text-primary-foreground transition-colors"
                   aria-label={social.label}
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
                   <social.icon className="h-5 w-5" />
                 </a>

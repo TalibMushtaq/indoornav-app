@@ -15,4 +15,9 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // --- ADD THIS SECTION ---
+  // This tells Vite to target modern browsers that support import.meta.env
+  build: {
+    target: 'esnext'
+  }
 }));

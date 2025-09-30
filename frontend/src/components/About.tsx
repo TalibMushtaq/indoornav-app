@@ -80,12 +80,13 @@ const About = () => {
             </div>
           </div>
           
-          {/* Placeholder for about image */}
-          <div className="bg-muted rounded-lg aspect-square flex items-center justify-center border">
-            <div className="text-center">
-              <Users className="h-24 w-24 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground text-lg">Team & Mission Image</p>
-            </div>
+          {/* About Image */}
+          <div className="rounded-lg aspect-square overflow-hidden border">
+            <img 
+              src="https://ndoornav-app-bucket.s3.ap-south-1.amazonaws.com/indooranav-app-public-assets/aboutImage-hero.jpg" 
+              alt="Team collaborating on the NaviGuide mission"
+              className="w-full h-full object-cover"
+            />
           </div>
         </div>
       </div>

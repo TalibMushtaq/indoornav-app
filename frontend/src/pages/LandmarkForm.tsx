@@ -1,0 +1,330 @@
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
+import AdminLayout from '@/components/AdminLayout';
+import { useToast } from "@/components/ui/use-toast";
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+interface IBuilding {
+  _id: string;
+  name: string;
+  floors: { number: string; name: string }[];
+}
+
+const landmarkTypes = [
+  'room', 'entrance', 'elevator', 'stairs', 'restroom', 'emergency_exit', 'facility', 'other',
+  'lecture_hall', 'classroom', 'lab', 'library', 'auditorium', 'department_office',
+  'admissions_office', 'student_union', 'cafeteria', 'bookstore', 'gym', 
+  'health_center', 'information_desk'
+];
+
+const LandmarkForm = () => {
+  const { landmarkId } = useParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const isEditing = Boolean(landmarkId);
+
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [buildingId, setBuildingId] = useState('');
+  const [floor, setFloor] = useState('');
+  const [type, setType] = useState('');
+  const [coordinates, setCoordinates] = useState({ x: 0, y: 0 });
+  const [images, setImages] = useState<File[]>([]);
+  const [buildings, setBuildings] = useState<IBuilding[]>([]);
+  const [availableFloors, setAvailableFloors] = useState<{ number: string; name: string }[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch all buildings for the dropdown
+  useEffect(() => {
+    const fetchBuildings = async () => {
+      const token = localStorage.getItem('adminToken');
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/admin/buildings`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Could not fetch buildings.');
+        const data = await response.json();
+        setBuildings(data.data.buildings);
+      } catch (err: any) {
+        setError(err.message);
+      }
+    };
+    fetchBuildings();
+  }, []);
+
+  // Fetch landmark data if in edit mode
+  useEffect(() => {
+    if (isEditing && landmarkId && buildings.length > 0) {
+      const fetchLandmarkData = async () => {
+        setIsLoading(true);
+        const token = localStorage.getItem('adminToken');
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/admin/landmarks/${landmarkId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!response.ok) throw new Error('Failed to fetch landmark data.');
+          const data = await response.json();
+          const landmark = data.data.landmark;
+          
+          setName(landmark.name);
+          setDescription(landmark.description || '');
+          setBuildingId(landmark.building._id);
+          setType(landmark.type);
+          // force numeric coordinates
+          setCoordinates({
+            x: Number(landmark.coordinates?.x) || 0,
+            y: Number(landmark.coordinates?.y) || 0
+          });
+
+          const parentBuilding = buildings.find(b => b._id === landmark.building._id);
+          if (parentBuilding) {
+            setAvailableFloors(parentBuilding.floors);
+          }
+          setFloor(landmark.floor);
+
+        } catch (err: any) {
+          setError(err.message);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchLandmarkData();
+    }
+  }, [landmarkId, isEditing, buildings]);
+
+  // Handle manual changes to the building dropdown
+  useEffect(() => {
+    const selectedBuilding = buildings.find(b => b._id === buildingId);
+    setAvailableFloors(selectedBuilding ? selectedBuilding.floors : []);
+    
+    if (document.activeElement?.id === 'building-select-trigger') {
+        setFloor('');
+    }
+  }, [buildingId, buildings]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    setUploadProgress(0);
+    const token = localStorage.getItem('adminToken');
+
+    // quick client-side validation
+    if (!buildingId || buildingId.length !== 24) {
+      setError("Please select a valid building.");
+      setIsLoading(false);
+      return;
+    }
+    if (!type) {
+      setError("Please select a landmark type.");
+      setIsLoading(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('name', name);
+    if (description) formData.append('description', description);
+    formData.append('building', buildingId);
+    formData.append('floor', floor);
+    formData.append('type', type);
+    formData.append('coordinates', JSON.stringify({
+      x: Number(coordinates.x),
+      y: Number(coordinates.y)
+    }));
+
+    images.forEach(imageFile => {
+      formData.append('images', imageFile);
+    });
+
+    console.log("Submitting landmark data:", {
+      name, description, buildingId, floor, type,
+      coordinates: { x: Number(coordinates.x), y: Number(coordinates.y) },
+      imagesCount: images.length
+    });
+
+    const url = isEditing
+      ? `${API_BASE_URL}/api/admin/landmarks/${landmarkId}`
+      : `${API_BASE_URL}/api/admin/landmarks`;
+    
+    const method = isEditing ? 'PUT' : 'POST';
+
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+    
+    xhr.timeout = 60000;
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = Math.round((event.loaded / event.total) * 100);
+        setUploadProgress(percentComplete);
+      }
+    };
+
+    xhr.onload = () => {
+      setIsLoading(false);
+      setUploadProgress(100);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        toast({
+          title: "Success!",
+          description: `Landmark "${name}" has been ${isEditing ? 'updated' : 'created'} successfully.`,
+        });
+        navigate('/admin/landmarks');
+      } else {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          console.error("Backend validation error:", response.errors || response);
+          setError(response.message || 'An error occurred during upload.');
+        } catch {
+          setError('An unknown error occurred.');
+        }
+        setUploadProgress(0);
+      }
+    };
+
+    xhr.onerror = () => {
+      setIsLoading(false);
+      setError('A network error occurred. Please check your connection.');
+      setUploadProgress(0);
+    };
+    
+    xhr.ontimeout = () => {
+      setIsLoading(false);
+      setError('Upload timed out. The connection may be too slow.');
+      setUploadProgress(0);
+    };
+    
+    xhr.onabort = () => {
+       setIsLoading(false);
+       setError('Upload was cancelled.');
+       setUploadProgress(0);
+    };
+
+    xhr.send(formData);
+  };
+  
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setImages(Array.from(e.target.files).slice(0, 5));
+    }
+  };
+
+  return (
+    <AdminLayout>
+      <Card>
+        <CardHeader>
+          <CardTitle>{isEditing ? 'Edit Landmark' : 'Add New Landmark'}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               <div className="space-y-2">
+                <Label htmlFor="name">Landmark Name</Label>
+                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+              </div>
+               <div className="space-y-2">
+                <Label htmlFor="type">Landmark Type</Label>
+                <Select value={type} onValueChange={setType} required>
+                  <SelectTrigger><SelectValue placeholder="Select a type" /></SelectTrigger>
+                  <SelectContent>
+                    {landmarkTypes.map(t => (
+                      <SelectItem key={t} value={t}>
+                        {t.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="building">Building</Label>
+                <Select value={buildingId} onValueChange={setBuildingId} required>
+                  <SelectTrigger id="building-select-trigger"><SelectValue placeholder="Select a building" /></SelectTrigger>
+                  <SelectContent>
+                    {buildings.map(b => (
+                      <SelectItem key={b._id} value={b._id}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="floor">Floor</Label>
+                <Select value={floor} onValueChange={setFloor} required disabled={!buildingId}>
+                  <SelectTrigger><SelectValue placeholder="Select a floor" /></SelectTrigger>
+                  <SelectContent>
+                    {availableFloors.map(f => (
+                      <SelectItem key={f.number} value={f.number}>
+                        {f.name} ({f.number})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Coordinates</Label>
+                <div className="flex gap-4">
+                    <Input
+                      type="number"
+                      placeholder="X"
+                      value={coordinates.x}
+                      onChange={e => setCoordinates({...coordinates, x: Number(e.target.value)})}
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Y"
+                      value={coordinates.y}
+                      onChange={e => setCoordinates({...coordinates, y: Number(e.target.value)})}
+                    />
+                </div>
+              </div>
+               <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="images">Landmark Images (up to 5)</Label>
+                <Input 
+                  id="images"
+                  type="file"
+                  onChange={handleFileChange}
+                  multiple
+                  accept="image/*"
+                />
+              </div>
+            </div>
+
+            {isLoading && uploadProgress > 0 && (
+              <div className="space-y-2">
+                <Label>Uploading...</Label>
+                <Progress value={uploadProgress} className="w-full" />
+                <p className="text-sm text-muted-foreground text-center">{uploadProgress}%</p>
+              </div>
+            )}
+            
+            {error && <p className="text-destructive text-sm mt-2">{error}</p>}
+
+            <div className="flex gap-4 pt-4">
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Landmark' : 'Create Landmark')}
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => navigate('/admin/landmarks')}>Cancel</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </AdminLayout>
+  );
+};
+
+export default LandmarkForm;

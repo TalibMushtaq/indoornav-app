@@ -1,6 +1,6 @@
 // middlewares/awsupload.js
 
-const { S3Client, ListBucketsCommand } = require('@aws-sdk/client-s3');
+const { S3Client, ListBucketsCommand, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 const multer = require('multer');
 const multerS3 = require('multer-s3');
 const path = require('path');
@@ -36,16 +36,57 @@ const checkS3Connection = async () => {
   }
 };
 
+// --- S3 Deletion Function ---
+const deleteFromS3 = async (urls) => {
+  if (!urls || urls.length === 0) return;
+
+  // Extract keys from full S3 URLs
+  const keys = urls.map(url => {
+    try {
+      const urlObj = new URL(url);
+      // Remove leading slash from pathname
+      return urlObj.pathname.substring(1);
+    } catch (error) {
+      console.error('Invalid URL:', url);
+      return null;
+    }
+  }).filter(key => key !== null);
+
+  if (keys.length === 0) return;
+
+  const deleteParams = {
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Delete: {
+      Objects: keys.map(key => ({ Key: key })),
+      Quiet: false
+    }
+  };
+
+  try {
+    const result = await s3Client.send(new DeleteObjectsCommand(deleteParams));
+    console.log(`Successfully deleted ${result.Deleted?.length || 0} objects from S3`);
+    if (result.Errors && result.Errors.length > 0) {
+      console.error('Some objects failed to delete:', result.Errors);
+    }
+    return result;
+  } catch (error) {
+    console.error('Error deleting from S3:', error);
+    throw error;
+  }
+};
+
 // Configure multer-s3 storage
 const s3Storage = multerS3({
   s3: s3Client,
   bucket: process.env.AWS_BUCKET_NAME,
-  acl: 'public-read', // Change to 'private' if you want uploads private
   metadata: (req, file, cb) => {
     cb(null, { fieldName: file.fieldname });
   },
+  // --- UPDATED: Dynamic key based on admin ID and your desired folder ---
   key: (req, file, cb) => {
-    const folder = 'uploads';
+    // req.user is available because our 'authenticate' middleware runs first
+    const adminId = req.user?._id || 'unauthenticated';
+    const folder = `NaviGuide-public/${adminId}`; 
     const fileName = `${folder}/${Date.now()}_${path.basename(file.originalname)}`;
     cb(null, fileName);
   },
@@ -55,7 +96,7 @@ const s3Storage = multerS3({
 const upload = multer({
   storage: s3Storage,
   limits: {
-    fileSize: 1024 * 1024 * 5, // 5 MB
+    fileSize: 1024 * 1024 * 10, // 10 MB limit
   },
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png|gif|webp/;
@@ -69,4 +110,5 @@ const upload = multer({
   },
 });
 
-module.exports = { upload, checkS3Connection };
+// Export the delete function alongside the others
+module.exports = { upload, checkS3Connection, deleteFromS3 };

@@ -35,16 +35,17 @@ const feedbackSchema = z.object({
   message: z.string().min(10, 'Message must be at least 10 characters').max(1000).trim(),
 });
 
-// --- Building Schemas ---
+// --- Building Schemas (UPDATED 
 const buildingSchema = z.object({
   name: z.string().min(2, 'Building name must be at least 2 characters').max(100, 'Building name must be less than 100 characters').trim(),
   description: z.string().max(500, 'Description must be less than 500 characters').trim().optional(),
   address: z.string().max(200, 'Address must be less than 200 characters').trim().optional(),
   floors: jsonString.pipe(z.array(z.object({
     number: z.string().min(1, 'Floor number is required').trim(),
-    name: z.string().min(1, 'Floor name is required').trim(),
-    mapImage: z.string().url().optional()
+    name: z.string().min(1, 'Floor name is required').trim()
+   
   })).min(1, 'At least one floor is required'))
+  
 });
 
 const buildingUpdateSchema = buildingSchema.partial();
@@ -67,14 +68,15 @@ const landmarkSchema = z.object({
   building: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid building ID'),
   floor: z.string().min(1, 'Floor is required').trim(),
   coordinates: jsonString.pipe(coordinatesSchema),
-  type: z.enum(['room', 'entrance', 'elevator', 'stairs', 'restroom', 'emergency_exit', 'facility', 'other']),
+  type: z.enum([
+      'room', 'entrance', 'elevator', 'stairs', 'restroom', 'emergency_exit', 'facility', 'other',
+      'lecture_hall', 'classroom', 'lab', 'library', 'auditorium', 'department_office',
+      'admissions_office', 'student_union', 'cafeteria', 'bookstore', 'gym', 
+      'health_center', 'information_desk'
+  ]),
   roomNumber: z.string().max(20, 'Room number must be less than 20 characters').trim().optional(),
-  images: z.array(z.object({
-    url: z.string().url('Invalid image URL'),
-    caption: z.string().max(200).optional(),
-    isPrimary: z.boolean().default(false)
-  })).optional().default([]),
-  accessibility: jsonString.pipe(accessibilitySchema).optional().default({})
+  // Images are handled by multer, so they are not in the Zod schema for validation
+  // accessibility: jsonString.pipe(accessibilitySchema).optional().default({})
 });
 
 const landmarkUpdateSchema = landmarkSchema.partial().extend({
@@ -147,7 +149,7 @@ const searchSchema = z.object({
   building: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid building ID').optional()
 });
 
-// --- Middleware ---
+// --- Middleware (CORRECTED) ---
 const validate = (schema) => (req, res, next) => {
   try {
     req.body = schema.parse(req.body);
@@ -157,7 +159,8 @@ const validate = (schema) => (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'Validation error',
-        errors: error.errors.map(err => ({ field: err.path.join('.'), message: err.message }))
+        // FIX: Zod errors use 'issues', not 'errors'
+        errors: error.issues.map(err => ({ field: err.path.join('.'), message: err.message }))
       });
     }
     next(error);
@@ -173,7 +176,7 @@ const validateQuery = (schema) => (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'Query validation error',
-        errors: error.errors.map(err => ({ field: err.path.join('.'), message: err.message }))
+        errors: error.issues.map(err => ({ field: err.path.join('.'), message: err.message }))
       });
     }
     next(error);
@@ -189,7 +192,7 @@ const validateParams = (schema) => (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'Parameter validation error',
-        errors: error.errors.map(err => ({ field: err.path.join('.'), message: err.message }))
+        errors: error.issues.map(err => ({ field: err.path.join('.'), message: err.message }))
       });
     }
     next(error);

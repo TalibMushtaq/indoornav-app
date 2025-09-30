@@ -128,32 +128,46 @@ const visitorSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// --- Building Schema ---
+// --- Building Schema (UPDATED) ---
 const buildingSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, trim: true },
   address: { type: String, trim: true },
+  image: { type: String }, // ADD THIS LINE
   floors: [{
     number: { type: String, required: true },
     name: { type: String, required: true },
-    mapImage: { type: String }
+    mapImage: { type: String } 
   }],
   isActive: { type: Boolean, default: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: true }
 }, {
   timestamps: true
 });
-
-// --- Landmark Schema ---
+// --- Landmark Schema (UPDATED) ---
 const landmarkSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, trim: true },
   building: { type: mongoose.Schema.Types.ObjectId, ref: 'Building', required: true },
   floor: { type: String, required: true },
   coordinates: { x: { type: Number, required: true }, y: { type: Number, required: true } },
-  type: { type: String, enum: ['room', 'entrance', 'elevator', 'stairs', 'restroom', 'emergency_exit', 'facility', 'other'], required: true },
+  type: { 
+    type: String, 
+    enum: [
+      'room', 'entrance', 'elevator', 'stairs', 'restroom', 'emergency_exit', 'facility', 'other',
+      'lecture_hall', 'classroom', 'lab', 'library', 'auditorium', 'department_office',
+      'admissions_office', 'student_union', 'cafeteria', 'bookstore', 'gym', 
+      'health_center', 'information_desk'
+    ], 
+    required: true 
+  },
   roomNumber: { type: String, trim: true },
-  images: [{ url: String, caption: String, isPrimary: { type: Boolean, default: false } }],
+  // This array will store objects containing S3 URLs for landmark images
+  images: [{ 
+    url: { type: String, required: true },
+    caption: { type: String },
+    isPrimary: { type: Boolean, default: false } 
+  }],
   accessibility: {
     wheelchairAccessible: { type: Boolean, default: false },
     visualAidFriendly: { type: Boolean, default: false },
@@ -232,4 +246,3 @@ module.exports = {
   NavigationHistory,
   Feedback
 };
-
