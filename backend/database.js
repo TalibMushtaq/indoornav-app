@@ -15,9 +15,7 @@ const connectDB = async (retries = 5) => {
       }
       console.log('Attempting to connect to MongoDB...');
       await mongoose.connect(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        serverSelectionTimeoutMS: 5000,
+        serverSelectionTimeoutMS: 5000, // modern driver only needs this
       });
       return;
     } catch (error) {
@@ -35,37 +33,36 @@ const connectDB = async (retries = 5) => {
 
 // --- Admin Schema ---
 const adminSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: [true, 'Please provide a name'],
-        trim: true
-    },
-    email: {
-        type: String,
-        required: [true, 'Please provide an email'],
-        unique: true,
-        match: [ /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please provide a valid email' ],
-        lowercase: true
-    },
-    password: {
-        type: String,
-        required: [true, 'Please provide a password'],
-        minlength: 6,
-        select: false 
-    },
-    role: {
-        type: String,
-        enum: ['admin'],
-        default: 'admin'
-    },
-    isActive: {
-        type: Boolean,
-        default: true
-    }
+  name: {
+    type: String,
+    required: [true, 'Please provide a name'],
+    trim: true
+  },
+  email: {
+    type: String,
+    required: [true, 'Please provide an email'],
+    unique: true, // unique index already created here
+    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please provide a valid email'],
+    lowercase: true
+  },
+  password: {
+    type: String,
+    required: [true, 'Please provide a password'],
+    minlength: 6,
+    select: false
+  },
+  role: {
+    type: String,
+    enum: ['admin'],
+    default: 'admin'
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  }
 }, {
-    timestamps: true
+  timestamps: true
 });
-
 
 // --- Feedback Schema ---
 const feedbackSchema = new mongoose.Schema({
@@ -101,23 +98,22 @@ const feedbackSchema = new mongoose.Schema({
 
 feedbackSchema.index({ email: 1 });
 
-
 // Middleware to hash password before saving admin
-adminSchema.pre('save', async function(next) {
-    if (!this.isModified('password')) {
-        return next();
-    }
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
+adminSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) {
+    return next();
+  }
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
 });
 
 // Method to compare entered password with hashed password
-adminSchema.methods.matchPassword = async function(enteredPassword) {
-    return await bcrypt.compare(enteredPassword, this.password);
+adminSchema.methods.matchPassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// --- Visitor Schema (Restored) ---
+// --- Visitor Schema ---
 const visitorSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, lowercase: true, trim: true },
@@ -128,45 +124,45 @@ const visitorSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// --- Building Schema (UPDATED) ---
+// --- Building Schema ---
 const buildingSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, trim: true },
   address: { type: String, trim: true },
-  image: { type: String }, // ADD THIS LINE
+  image: { type: String },
   floors: [{
     number: { type: String, required: true },
     name: { type: String, required: true },
-    mapImage: { type: String } 
+    mapImage: { type: String }
   }],
   isActive: { type: Boolean, default: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: true }
 }, {
   timestamps: true
 });
-// --- Landmark Schema (UPDATED) ---
+
+// --- Landmark Schema ---
 const landmarkSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, trim: true },
   building: { type: mongoose.Schema.Types.ObjectId, ref: 'Building', required: true },
   floor: { type: String, required: true },
   coordinates: { x: { type: Number, required: true }, y: { type: Number, required: true } },
-  type: { 
-    type: String, 
+  type: {
+    type: String,
     enum: [
       'room', 'entrance', 'elevator', 'stairs', 'restroom', 'emergency_exit', 'facility', 'other',
       'lecture_hall', 'classroom', 'lab', 'library', 'auditorium', 'department_office',
-      'admissions_office', 'student_union', 'cafeteria', 'bookstore', 'gym', 
+      'admissions_office', 'student_union', 'cafeteria', 'bookstore', 'gym',
       'health_center', 'information_desk'
-    ], 
-    required: true 
+    ],
+    required: true
   },
   roomNumber: { type: String, trim: true },
-  // This array will store objects containing S3 URLs for landmark images
-  images: [{ 
+  images: [{
     url: { type: String, required: true },
     caption: { type: String },
-    isPrimary: { type: Boolean, default: false } 
+    isPrimary: { type: Boolean, default: false }
   }],
   accessibility: {
     wheelchairAccessible: { type: Boolean, default: false },
@@ -202,12 +198,12 @@ const pathSchema = new mongoose.Schema({
 
 // --- Navigation History Schema ---
 const navigationHistorySchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' }, // Could be an admin testing it
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
   sessionId: { type: String, required: true },
   building: { type: mongoose.Schema.Types.ObjectId, ref: 'Building', required: true },
   fromLandmark: { type: mongoose.Schema.Types.ObjectId, ref: 'Landmark', required: true },
   toLandmark: { type: mongoose.Schema.Types.ObjectId, ref: 'Landmark', required: true },
-  route: [ mongoose.Schema.Types.Mixed ],
+  route: [mongoose.Schema.Types.Mixed],
   totalDistance: { type: Number, required: true },
   estimatedTime: { type: Number, required: true },
   actualTime: { type: Number },
@@ -219,7 +215,7 @@ const navigationHistorySchema = new mongoose.Schema({
 });
 
 // --- Create indexes for better performance ---
-adminSchema.index({ email: 1 });
+// (Removed duplicate admin index)
 visitorSchema.index({ email: 1 });
 buildingSchema.index({ createdBy: 1 });
 landmarkSchema.index({ building: 1, createdBy: 1 });
@@ -234,8 +230,8 @@ const Landmark = mongoose.model('Landmark', landmarkSchema);
 const Path = mongoose.model('Path', pathSchema);
 const NavigationHistory = mongoose.model('NavigationHistory', navigationHistorySchema);
 const Feedback = mongoose.model('Feedback', feedbackSchema);
-// --- Export models and connection function ---
 
+// --- Export models and connection function ---
 module.exports = {
   connectDB,
   Admin,
