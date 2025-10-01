@@ -116,8 +116,8 @@ adminSchema.methods.matchPassword = async function (enteredPassword) {
 // --- Visitor Schema ---
 const visitorSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
-  email: { type: String, required: true, lowercase: true, trim: true },
   phone: { type: String, trim: true },
+  address: { type: String, trim: true }, // ✨ ADDED: Address field
   building: { type: mongoose.Schema.Types.ObjectId, ref: 'Building' },
   lastVisit: { type: Date, default: Date.now }
 }, {

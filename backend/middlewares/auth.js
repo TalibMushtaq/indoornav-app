@@ -42,7 +42,7 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    req.user = admin;
+    req.user = admin; // ✨ FIX: Changed back from req.admin to req.user
     next();
   } catch (error) {
     console.error('AUTH MIDDLEWARE ERROR:');
@@ -62,7 +62,7 @@ const authenticate = async (req, res, next) => {
 };
 
 const requireAdmin = (req, res, next) => {
-    if (req.user && req.user.role === 'admin') {
+    if (req.user && req.user.role === 'admin') { // ✨ FIX: Changed back from req.admin to req.user
         next();
     } else {
         res.status(403).json({

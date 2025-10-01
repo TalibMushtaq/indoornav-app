@@ -16,6 +16,7 @@ import {
   KeyRound,
   X,
   PlusCircle,
+  Users, // ✨ 1. ICON IMPORTED HERE
 } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -336,6 +337,7 @@ const AdminDashboard: React.FC = () => {
         { path: '/admin/buildings', icon: Building, label: 'Buildings' },
         { path: '/admin/landmarks', icon: MapPin, label: 'Landmarks' },
         { path: '/admin/paths', icon: Route, label: 'Paths' },
+        { path: '/admin/visitors', icon: Users, label: 'Visitor Logs' }, // ✨ 2. NEW LINK ADDED HERE
       ].map((item) => (
         <NavLink
           key={item.path}
@@ -513,4 +515,3 @@ const AdminDashboard: React.FC = () => {
 };
 
 export default AdminDashboard;
-

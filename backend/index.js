@@ -14,7 +14,8 @@ const { checkS3Connection } = require('./middlewares/awsupload');
 const adminRoutes = require('./routes/admin');
 const navigationRoutes = require('./routes/navigation');
 const visitorRoutes = require('./routes/visitor');
-const feedbackRoutes = require("./routes/feedback"); 
+const feedbackRoutes = require("./routes/feedback");
+const buildingRoutes = require('./routes/buildings'); // ✨ ADDED
 
 // Error handler
 const errorHandler = require('./middlewares/errorHandler');
@@ -86,6 +87,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/navigation', navigationRoutes);
 app.use('/api/visitors', visitorRoutes);
 app.use("/api/feedback", feedbackRoutes);
+app.use('/api/buildings', buildingRoutes);
 
 // API documentation endpoint
 app.get('/api', (req, res) => {
@@ -97,7 +99,8 @@ app.use('/api', (req, res) => {
   res.status(404).json({
     success: false,
     message: 'API endpoint not found',
-    availableEndpoints: ['/api/navigation', '/api/admin', '/api/visitors', '/api/feedback'] // <-- UPDATED 404 MESSAGE
+    // 🔄 UPDATED 404 MESSAGE
+    availableEndpoints: ['/api/navigation', '/api/admin', '/api/visitors', '/api/feedback', '/api/buildings']
   });
 });
 

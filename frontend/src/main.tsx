@@ -16,13 +16,14 @@ import AdminPaths from "./pages/AdminPaths";
 import VisitorRegistration from "./pages/VisitorRegistration";
 import NavigationPage from "./pages/Navigation";
 import NotFound from "./pages/NotFound";
+import BuildingVisitors from "./pages/BuildingVisitors";
 
 // Create the router configuration
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <App />, // App is now the main layout component
-    errorElement: <NotFound />, // A top-level error page
+    element: <App />,
+    errorElement: <NotFound />,
     children: [
       // Public Routes
       { index: true, element: <Index /> },
@@ -44,17 +45,17 @@ const router = createBrowserRouter([
       { path: "admin/landmarks/edit/:landmarkId", element: <LandmarkForm /> },
 
       { path: "admin/paths", element: <AdminPaths /> },
+      
+      { path: "admin/visitors", element: <BuildingVisitors /> },
     ],
   },
-  // You can define other top-level routes here if needed
 ]);
 
-// Render the app using the RouterProvider
+// Render the app
 createRoot(document.getElementById("root")!).render(
   <RouterProvider
     router={router}
     future={{
-      // Opt-in to the new startTransition behavior
       v7_startTransition: true,
     }}
   />
