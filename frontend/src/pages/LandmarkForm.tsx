@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { useToast } from "@/components/ui/use-toast";
 
@@ -39,12 +40,12 @@ const LandmarkForm = () => {
   const [type, setType] = useState('');
   const [coordinates, setCoordinates] = useState({ x: 0, y: 0 });
   const [images, setImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [buildings, setBuildings] = useState<IBuilding[]>([]);
   const [availableFloors, setAvailableFloors] = useState<{ number: string; name: string }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch all buildings for the dropdown
   useEffect(() => {
     const fetchBuildings = async () => {
       const token = localStorage.getItem('adminToken');
@@ -62,7 +63,6 @@ const LandmarkForm = () => {
     fetchBuildings();
   }, []);
 
-  // Fetch landmark data if in edit mode
   useEffect(() => {
     if (isEditing && landmarkId && buildings.length > 0) {
       const fetchLandmarkData = async () => {
@@ -80,17 +80,18 @@ const LandmarkForm = () => {
           setDescription(landmark.description || '');
           setBuildingId(landmark.building._id);
           setType(landmark.type);
-          // force numeric coordinates
           setCoordinates({
             x: Number(landmark.coordinates?.x) || 0,
             y: Number(landmark.coordinates?.y) || 0
           });
 
           const parentBuilding = buildings.find(b => b._id === landmark.building._id);
-          if (parentBuilding) {
-            setAvailableFloors(parentBuilding.floors);
-          }
+          if (parentBuilding) setAvailableFloors(parentBuilding.floors);
           setFloor(landmark.floor);
+
+          if (landmark.images) {
+            setImagePreviews(landmark.images);
+          }
 
         } catch (err: any) {
           setError(err.message);
@@ -102,15 +103,20 @@ const LandmarkForm = () => {
     }
   }, [landmarkId, isEditing, buildings]);
 
-  // Handle manual changes to the building dropdown
   useEffect(() => {
     const selectedBuilding = buildings.find(b => b._id === buildingId);
     setAvailableFloors(selectedBuilding ? selectedBuilding.floors : []);
-    
-    if (document.activeElement?.id === 'building-select-trigger') {
-        setFloor('');
-    }
+    if (document.activeElement?.id === 'building-select-trigger') setFloor('');
   }, [buildingId, buildings]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files).slice(0, 5);
+      setImages(files);
+      const previews = files.map(file => URL.createObjectURL(file));
+      setImagePreviews(previews);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,7 +125,6 @@ const LandmarkForm = () => {
     setUploadProgress(0);
     const token = localStorage.getItem('adminToken');
 
-    // quick client-side validation
     if (!buildingId || buildingId.length !== 24) {
       setError("Please select a valid building.");
       setIsLoading(false);
@@ -132,25 +137,14 @@ const LandmarkForm = () => {
     }
 
     const formData = new FormData();
-    formData.append('name', name);
-    if (description) formData.append('description', description);
+    formData.append('name', name.trim());
+    if (description) formData.append('description', description.trim());
     formData.append('building', buildingId);
     formData.append('floor', floor);
     formData.append('type', type);
-    formData.append('coordinates', JSON.stringify({
-      x: Number(coordinates.x),
-      y: Number(coordinates.y)
-    }));
+    formData.append('coordinates', JSON.stringify({ x: Number(coordinates.x), y: Number(coordinates.y) }));
 
-    images.forEach(imageFile => {
-      formData.append('images', imageFile);
-    });
-
-    console.log("Submitting landmark data:", {
-      name, description, buildingId, floor, type,
-      coordinates: { x: Number(coordinates.x), y: Number(coordinates.y) },
-      imagesCount: images.length
-    });
+    images.forEach(file => formData.append('images', file));
 
     const url = isEditing
       ? `${API_BASE_URL}/api/admin/landmarks/${landmarkId}`
@@ -160,10 +154,7 @@ const LandmarkForm = () => {
 
     const xhr = new XMLHttpRequest();
     xhr.open(method, url);
-    if (token) {
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    }
-    
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.timeout = 60000;
 
     xhr.upload.onprogress = (event) => {
@@ -185,7 +176,6 @@ const LandmarkForm = () => {
       } else {
         try {
           const response = JSON.parse(xhr.responseText);
-          console.error("Backend validation error:", response.errors || response);
           setError(response.message || 'An error occurred during upload.');
         } catch {
           setError('An unknown error occurred.');
@@ -214,12 +204,6 @@ const LandmarkForm = () => {
 
     xhr.send(formData);
   };
-  
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setImages(Array.from(e.target.files).slice(0, 5));
-    }
-  };
 
   return (
     <AdminLayout>
@@ -230,11 +214,11 @@ const LandmarkForm = () => {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               <div className="space-y-2">
+              <div className="space-y-2">
                 <Label htmlFor="name">Landmark Name</Label>
-                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+                <Input id="name" value={name} onChange={e => setName(e.target.value)} required />
               </div>
-               <div className="space-y-2">
+              <div className="space-y-2">
                 <Label htmlFor="type">Landmark Type</Label>
                 <Select value={type} onValueChange={setType} required>
                   <SelectTrigger><SelectValue placeholder="Select a type" /></SelectTrigger>
@@ -252,9 +236,7 @@ const LandmarkForm = () => {
                 <Select value={buildingId} onValueChange={setBuildingId} required>
                   <SelectTrigger id="building-select-trigger"><SelectValue placeholder="Select a building" /></SelectTrigger>
                   <SelectContent>
-                    {buildings.map(b => (
-                      <SelectItem key={b._id} value={b._id}>{b.name}</SelectItem>
-                    ))}
+                    {buildings.map(b => <SelectItem key={b._id} value={b._id}>{b.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -263,44 +245,43 @@ const LandmarkForm = () => {
                 <Select value={floor} onValueChange={setFloor} required disabled={!buildingId}>
                   <SelectTrigger><SelectValue placeholder="Select a floor" /></SelectTrigger>
                   <SelectContent>
-                    {availableFloors.map(f => (
-                      <SelectItem key={f.number} value={f.number}>
-                        {f.name} ({f.number})
-                      </SelectItem>
-                    ))}
+                    {availableFloors.map(f => <SelectItem key={f.number} value={f.number}>{f.name} ({f.number})</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Coordinates</Label>
                 <div className="flex gap-4">
-                    <Input
-                      type="number"
-                      placeholder="X"
-                      value={coordinates.x}
-                      onChange={e => setCoordinates({...coordinates, x: Number(e.target.value)})}
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Y"
-                      value={coordinates.y}
-                      onChange={e => setCoordinates({...coordinates, y: Number(e.target.value)})}
-                    />
+                  <Input type="number" placeholder="X" value={coordinates.x} onChange={e => setCoordinates({...coordinates, x: Number(e.target.value)})} />
+                  <Input type="number" placeholder="Y" value={coordinates.y} onChange={e => setCoordinates({...coordinates, y: Number(e.target.value)})} />
                 </div>
               </div>
-               <div className="space-y-2 md:col-span-2">
+              <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="description">Description</Label>
-                <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} />
+                <Textarea id="description" value={description} onChange={e => setDescription(e.target.value)} />
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="images">Landmark Images (up to 5)</Label>
                 <Input 
-                  id="images"
                   type="file"
-                  onChange={handleFileChange}
+                  id="images"
                   multiple
                   accept="image/*"
+                  onChange={handleFileChange}
+                  className="cursor-pointer file:bg-black file:text-white file:py-1 file:px-3 file:rounded file:border-0 file:hover:opacity-90"
                 />
+                {imagePreviews.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {imagePreviews.map((src, i) => (
+                      <div key={i} className="relative w-24 h-24 border rounded overflow-hidden">
+                        <img src={src} alt={`Preview ${i}`} className="w-full h-full object-cover" />
+                        <div className="absolute top-1 right-1 bg-green-500 p-1 rounded-full">
+                          <CheckCircle2 className="h-4 w-4 text-white" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -311,7 +292,7 @@ const LandmarkForm = () => {
                 <p className="text-sm text-muted-foreground text-center">{uploadProgress}%</p>
               </div>
             )}
-            
+
             {error && <p className="text-destructive text-sm mt-2">{error}</p>}
 
             <div className="flex gap-4 pt-4">

@@ -31,8 +31,25 @@ app.use(helmet({
   contentSecurityPolicy: { /* ... existing directives ... */ },
 }));
 
+
 // CORS configuration
-const corsOptions = { /* ... existing options ... */ };
+
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",")
+  : ["http://localhost:8080"];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+};
 app.use(cors(corsOptions));
 
 // Rate limiting
@@ -134,4 +151,3 @@ process.on('uncaughtException', (err) => {
 
 
 module.exports = app;
-

@@ -168,8 +168,16 @@ const landmarkSchema = new mongoose.Schema({
     wheelchairAccessible: { type: Boolean, default: false },
     visualAidFriendly: { type: Boolean, default: false },
     hearingAidFriendly: { type: Boolean, default: false }
+  }, 
+  status: {
+    type: String,
+    enum: ['open', 'closed', 'restricted'], // Defines allowed values
+    default: 'open', // New landmarks are open by default
   },
-  isActive: { type: Boolean, default: true },
+  isActive: { // You can keep this for soft deletes
+    type: Boolean,
+    default: true,
+  },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: true }
 }, {
   timestamps: true
@@ -190,6 +198,11 @@ const pathSchema = new mongoose.Schema({
     requiresStairs: { type: Boolean, default: false }
   },
   isBidirectional: { type: Boolean, default: true },
+   status: {
+    type: String,
+    enum: ['open', 'closed', 'restricted'],
+    default: 'open',
+  },
   isActive: { type: Boolean, default: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: true }
 }, {

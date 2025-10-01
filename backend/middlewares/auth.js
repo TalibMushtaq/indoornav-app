@@ -2,9 +2,8 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const { Admin } = require('../database');
 
-// Rate limiting for auth endpoints
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 10,
   message: {
     success: false,
@@ -14,7 +13,6 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Verify JWT token for authenticated admins
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.header('Authorization');
@@ -27,7 +25,6 @@ const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const admin = await Admin.findById(decoded.id).select('-password');
     
@@ -45,10 +42,12 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    req.user = admin; // Attach admin to the request object
+    req.user = admin;
     next();
   } catch (error) {
-    console.error('Auth middleware error:', error.name, error.message);
+    console.error('AUTH MIDDLEWARE ERROR:');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
     
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ success: false, message: 'Invalid token.' });
@@ -62,7 +61,6 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-// Check if the authenticated user is an admin
 const requireAdmin = (req, res, next) => {
     if (req.user && req.user.role === 'admin') {
         next();
@@ -74,13 +72,11 @@ const requireAdmin = (req, res, next) => {
     }
 };
 
-// Generate JWT token
 const generateToken = (id, name, role) => {
   return jwt.sign({ id, name, role }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || '1d'
   });
 };
-
 
 module.exports = {
   authenticate,

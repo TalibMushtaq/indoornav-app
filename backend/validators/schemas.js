@@ -26,6 +26,13 @@ const adminSigninSchema = z.object({
   password: z.string().min(1, 'Password is required')
 });
 
+// Define validation schema for password reset
+const resetPasswordSchema = z.object({
+  email: z.string().email('A valid email for the admin account is required'),
+  masterPassword: z.string().min(1, 'Master password is required'),
+  newPassword: z.string().min(6, 'The new password must be at least 6 characters long'),
+});
+
 // --- Feedback Schema ---
 const feedbackSchema = z.object({
   firstName: z.string().min(1, 'First name is required').max(50).trim(),
@@ -35,7 +42,7 @@ const feedbackSchema = z.object({
   message: z.string().min(10, 'Message must be at least 10 characters').max(1000).trim(),
 });
 
-// --- Building Schemas (UPDATED 
+// --- Building Schemas ---
 const buildingSchema = z.object({
   name: z.string().min(2, 'Building name must be at least 2 characters').max(100, 'Building name must be less than 100 characters').trim(),
   description: z.string().max(500, 'Description must be less than 500 characters').trim().optional(),
@@ -149,7 +156,7 @@ const searchSchema = z.object({
   building: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid building ID').optional()
 });
 
-// --- Middleware (CORRECTED) ---
+// --- Middleware ---
 const validate = (schema) => (req, res, next) => {
   try {
     req.body = schema.parse(req.body);
@@ -159,7 +166,6 @@ const validate = (schema) => (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'Validation error',
-        // FIX: Zod errors use 'issues', not 'errors'
         errors: error.issues.map(err => ({ field: err.path.join('.'), message: err.message }))
       });
     }
@@ -200,7 +206,9 @@ const validateParams = (schema) => (req, res, next) => {
 };
 
 module.exports = {
+  z, // <-- Export z from here
   adminSignupSchema, adminSigninSchema,
+  resetPasswordSchema,
   feedbackSchema,
   buildingSchema, buildingUpdateSchema,
   landmarkSchema, landmarkUpdateSchema,

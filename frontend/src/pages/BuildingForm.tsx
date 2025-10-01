@@ -75,12 +75,14 @@ const BuildingForm = () => {
     if (file) {
       setBuildingImage(file);
       
-      // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+    } else {
+      setBuildingImage(null);
+      setImagePreview(null);
     }
   };
 
@@ -103,9 +105,9 @@ const BuildingForm = () => {
     const token = localStorage.getItem('adminToken');
 
     const formData = new FormData();
-    formData.append('name', name);
-    formData.append('description', description);
-    formData.append('address', address);
+    formData.append('name', name.trim());
+    formData.append('description', description.trim());
+    formData.append('address', address.trim());
     formData.append('floors', JSON.stringify(floors));
 
     if (buildingImage instanceof File) {
@@ -118,7 +120,6 @@ const BuildingForm = () => {
       
     const method = isEditing ? 'PUT' : 'POST';
 
-    // Simulate upload progress
     const progressInterval = setInterval(() => {
       setUploadProgress(prev => {
         if (prev >= 90) {
@@ -192,7 +193,7 @@ const BuildingForm = () => {
                     type="file" 
                     accept="image/*" 
                     onChange={(e) => handleImageChange(e.target.files ? e.target.files[0] : null)}
-                    className="cursor-pointer"
+                    className="cursor-pointer file:bg-black file:text-white file:py-1 file:px-3 file:rounded file:border-0 file:hover:opacity-90"
                   />
                   {imagePreview && (
                     <div className="mt-4 relative">
@@ -244,7 +245,6 @@ const BuildingForm = () => {
             
             {error && <p className="text-destructive text-sm mt-4">{error}</p>}
 
-            {/* Upload Progress Indicator */}
             {isUploading && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
