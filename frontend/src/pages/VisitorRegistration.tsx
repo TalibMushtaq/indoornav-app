@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowLeft, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
-// Schema without email, but with optional address and phone
+// Schema without email, with optional address and phone
 const visitorSchema = z.object({
   name: z.string().trim().min(2, { message: "Name must be at least 2 characters" }).max(100),
   phone: z.string().trim().max(20).optional().or(z.literal('')),
@@ -24,28 +25,43 @@ interface Building {
 }
 
 const VisitorRegistration = () => {
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    address: "",
-    buildingId: ""
-  });
+  const [formData, setFormData] = useState({ name: "", phone: "", address: "", buildingId: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [buildings, setBuildings] = useState<Building[]>([]);
+  const [hasToken, setHasToken] = useState(false);
+
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
+    // Check if visitor token exists
+    const token = localStorage.getItem('visitorToken');
+    if (token) setHasToken(true);
+
+    // Fetch buildings
     const fetchBuildings = async () => {
       try {
         const response = await fetch('/api/buildings/list');
-        if (!response.ok) throw new Error('Failed to fetch buildings');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch buildings: ${response.status} ${response.statusText}`);
+        }
+
         const result = await response.json();
-        if (result.success) {
-          setBuildings(result.data);
+        console.log("Buildings API result:", result);
+
+        if (result.success && Array.isArray(result.data)) {
+          // Map backend _id to frontend id
+          const mappedBuildings = result.data.map((b: any) => ({
+            id: b._id || b.id,
+            name: b.name
+          }));
+          setBuildings(mappedBuildings);
+        } else {
+          throw new Error("Invalid data format from server.");
         }
       } catch (error) {
-        console.error(error);
+        console.error("Fetch buildings error:", error);
         toast({
           title: "Error",
           description: "Could not load building list.",
@@ -53,9 +69,14 @@ const VisitorRegistration = () => {
         });
       }
     };
+
     fetchBuildings();
   }, [toast]);
 
+  // Redirect if token exists
+  useEffect(() => {
+    if (hasToken) navigate("/navigation");
+  }, [hasToken, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,8 +94,11 @@ const VisitorRegistration = () => {
 
       const result = await response.json();
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || 'An unknown error occurred.');
+      if (!response.ok || !result.success) throw new Error(result.message || 'An unknown error occurred.');
+
+      if (result.data?.token) {
+        localStorage.setItem('visitorToken', result.data.token); // store 12-hour token
+        setHasToken(true);
       }
 
       toast({
@@ -82,19 +106,13 @@ const VisitorRegistration = () => {
         description: "Welcome! You can now navigate the building."
       });
 
-      // Clear form
-      setFormData({
-        name: "",
-        phone: "",
-        address: "",
-        buildingId: ""
-      });
+      setFormData({ name: "", phone: "", address: "", buildingId: "" });
 
     } catch (error) {
       if (error instanceof z.ZodError) {
         const newErrors: Record<string, string> = {};
-        error.issues.forEach((issue) => {
-          newErrors[String(issue.path[0])] = issue.message;
+        error.issues.forEach(issue => {
+          if (issue.path[0]) newErrors[String(issue.path[0])] = issue.message;
         });
         setErrors(newErrors);
       } else {
@@ -109,21 +127,39 @@ const VisitorRegistration = () => {
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: keyof typeof formData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }));
-    }
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: "" }));
   };
+
+  const handleOptOut = () => {
+    localStorage.removeItem('visitorToken'); // remove token
+    setHasToken(false);                      // show registration form
+  };
+
+  if (hasToken) {
+    // Show opt-out option if already registered
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="max-w-md w-full text-center">
+          <CardHeader>
+            <CardTitle>You're already registered!</CardTitle>
+            <CardDescription>You are currently registered to a building.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={handleOptOut} className="w-full mt-4">
+              Change Building / Re-register
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <Button
-          variant="ghost"
-          className="mb-6"
-          onClick={() => window.history.back()}
-        >
+        <Button variant="ghost" className="mb-6" onClick={() => window.history.back()}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Home
         </Button>
@@ -134,22 +170,33 @@ const VisitorRegistration = () => {
               <UserPlus className="h-8 w-8 text-primary" />
             </div>
             <CardTitle className="text-2xl">Visitor Registration</CardTitle>
-            <CardDescription>
-              Register to access building navigation
-            </CardDescription>
+            <CardDescription>Register to access building navigation</CardDescription>
           </CardHeader>
 
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
-                <Input id="name" placeholder="John Doe" value={formData.name} onChange={(e) => handleInputChange("name", e.target.value)} className={errors.name ? "border-destructive" : ""} />
+                <Input
+                  id="name"
+                  placeholder="John Doe"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange("name", e.target.value)}
+                  className={errors.name ? "border-destructive" : ""}
+                />
                 {errors.name && (<p className="text-sm text-destructive">{errors.name}</p>)}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number</Label>
-                <Input id="phone" type="tel" placeholder="+1 (555) 123-4567" value={formData.phone} onChange={(e) => handleInputChange("phone", e.target.value)} className={errors.phone ? "border-destructive" : ""} />
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="+1 (555) 123-4567"
+                  value={formData.phone}
+                  onChange={(e) => handleInputChange("phone", e.target.value)}
+                  className={errors.phone ? "border-destructive" : ""}
+                />
                 {errors.phone && (<p className="text-sm text-destructive">{errors.phone}</p>)}
               </div>
 
@@ -162,14 +209,15 @@ const VisitorRegistration = () => {
                   onChange={(e) => handleInputChange("address", e.target.value)}
                   className={errors.address ? "border-destructive" : ""}
                 />
-                {errors.address && (
-                  <p className="text-sm text-destructive">{errors.address}</p>
-                )}
+                {errors.address && (<p className="text-sm text-destructive">{errors.address}</p>)}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="buildingId">Building to Visit</Label>
-                <Select value={formData.buildingId} onValueChange={(value) => handleInputChange("buildingId", value)}>
+                <Select
+                  value={formData.buildingId}
+                  onValueChange={(value) => handleInputChange("buildingId", value)}
+                >
                   <SelectTrigger className={errors.buildingId ? "border-destructive" : ""}>
                     <SelectValue placeholder="Select a building" />
                   </SelectTrigger>
@@ -181,7 +229,9 @@ const VisitorRegistration = () => {
                         </SelectItem>
                       ))
                     ) : (
-                      <SelectItem value="loading" disabled>Loading buildings...</SelectItem>
+                      <SelectItem value="loading" disabled>
+                        Loading buildings...
+                      </SelectItem>
                     )}
                   </SelectContent>
                 </Select>

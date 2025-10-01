@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { LogOut, LayoutDashboard, Building, MapPin, Route, PanelLeft } from 'lucide-react';
+import { LogOut, LayoutDashboard, Building, MapPin, Route, Users, PanelLeft } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -15,6 +15,14 @@ interface Admin {
 interface AdminLayoutProps {
   children: ReactNode;
 }
+
+const navItems = [
+  { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/admin/buildings', label: 'Buildings', icon: Building },
+  { path: '/admin/landmarks', label: 'Landmarks', icon: MapPin },
+  { path: '/admin/paths', label: 'Paths', icon: Route },
+  { path: '/admin/visitors', label: 'Visitor Logs', icon: Users },
+];
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navigate = useNavigate();
@@ -60,28 +68,31 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
   return (
     <div className="min-h-screen w-full bg-muted/40">
-      {/* --- DESKTOP SIDEBAR (Hidden on mobile) --- */}
+      {/* Desktop Sidebar */}
       <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 flex-col border-r bg-background sm:flex">
         <nav className="flex flex-col gap-4 px-4 py-6">
           <h1 className="text-2xl font-bold text-primary mb-6">NaviGuide</h1>
-          <NavLink to="/admin/dashboard" className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${ isActive ? 'bg-muted text-primary font-medium' : 'text-muted-foreground hover:text-primary' }`}>
-            <LayoutDashboard className="h-4 w-4" /> Dashboard
-          </NavLink>
-          <NavLink to="/admin/buildings" className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${ isActive ? 'bg-muted text-primary font-medium' : 'text-muted-foreground hover:text-primary' }`}>
-            <Building className="h-4 w-4" /> Buildings
-          </NavLink>
-          <NavLink to="/admin/landmarks" className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${ isActive ? 'bg-muted text-primary font-medium' : 'text-muted-foreground hover:text-primary' }`}>
-            <MapPin className="h-4 w-4" /> Landmarks
-          </NavLink>
-          <NavLink to="/admin/paths" className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${ isActive ? 'bg-muted text-primary font-medium' : 'text-muted-foreground hover:text-primary' }`}>
-            <Route className="h-4 w-4" /> Paths
-          </NavLink>
+          {navItems.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
+                  isActive
+                    ? 'bg-muted text-primary font-medium'
+                    : 'text-muted-foreground hover:text-primary'
+                }`
+              }
+            >
+              <item.icon className="h-4 w-4" /> {item.label}
+            </NavLink>
+          ))}
         </nav>
       </aside>
 
       <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-60">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-          {/* --- MOBILE MENU (Hamburger Button) --- */}
+          {/* Mobile Sheet Menu */}
           <Sheet>
             <SheetTrigger asChild>
               <Button size="icon" variant="outline" className="sm:hidden">
@@ -90,21 +101,17 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="sm:max-w-xs">
-              {/* This is the content of the slide-out menu */}
               <nav className="grid gap-6 text-lg font-medium">
                 <h1 className="text-2xl font-bold text-primary">NaviGuide</h1>
-                <NavLink to="/admin/dashboard" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
-                  <LayoutDashboard className="h-5 w-5" /> Dashboard
-                </NavLink>
-                <NavLink to="/admin/buildings" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
-                  <Building className="h-5 w-5" /> Buildings
-                </NavLink>
-                <NavLink to="/admin/landmarks" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
-                  <MapPin className="h-5 w-5" /> Landmarks
-                </NavLink>
-                <NavLink to="/admin/paths" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
-                  <Route className="h-5 w-5" /> Paths
-                </NavLink>
+                {navItems.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <item.icon className="h-5 w-5" /> {item.label}
+                  </NavLink>
+                ))}
               </nav>
             </SheetContent>
           </Sheet>

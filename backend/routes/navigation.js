@@ -154,15 +154,16 @@ class Graph {
 // @access  Public
 router.get('/buildings', validateQuery(paginationSchema), async (req, res) => {
   try {
-    const { page, limit } = req.query;
+    // Convert query params to numbers
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
     const skip = (page - 1) * limit;
 
-    // OPTIMIZATION: Use aggregation to get buildings and their landmark counts in one query.
     const buildingsPromise = Building.aggregate([
       { $match: { isActive: true } },
       { $sort: { name: 1 } },
       { $skip: skip },
-      { $limit: limit },
+      { $limit: limit }, // Now limit is a number
       {
         $lookup: {
           from: 'landmarks',
