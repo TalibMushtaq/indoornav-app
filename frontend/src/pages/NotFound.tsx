@@ -1,47 +1,9 @@
 import { useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import Orb from "../components/Orb"; // Adjust the import path if you saved Orb elsewhere
 
-// --- AnimalRunner Component (no changes) ---
-interface AnimalRunnerProps {
-  id: string;
-  imageSrc: string;
-  onComplete: (id: string) => void;
-}
-
-const AnimalRunner: React.FC<AnimalRunnerProps> = ({ id, imageSrc, onComplete }) => {
-  const [direction, setDirection] = useState<'left' | 'right'>('left');
-
-  useEffect(() => {
-    setDirection(Math.random() > 0.5 ? 'left' : 'right');
-  }, []);
-
-  return (
-    <motion.img
-      key={id}
-      src={imageSrc}
-      alt="Cute running animal"
-      className="absolute bottom-0 z-20 h-20 w-20"
-      initial={{ 
-        x: direction === 'left' ? -100 : window.innerWidth + 100,
-        y: Math.random() * 50 + 50,
-        rotateY: direction === 'left' ? 0 : 180,
-        opacity: 0,
-      }}
-      animate={{ 
-        x: direction === 'left' ? window.innerWidth + 100 : -100,
-        opacity: [0, 1, 1, 0],
-      }}
-      transition={{ 
-        duration: Math.random() * 5 + 4,
-        ease: "linear",
-      }}
-      onAnimationComplete={() => onComplete(id)}
-    />
-  );
-};
-
-// --- GHOST COMPONENT MOVED HERE ---
+// --- Ghost Component ---
 interface GhostProps {
   easterEggActive: boolean;
 }
@@ -66,72 +28,29 @@ const Ghost: React.FC<GhostProps> = ({ easterEggActive }) => (
 );
 
 
-// --- NotFound Component ---
+// --- Main NotFound Component ---
 const NotFound = () => {
   const location = useLocation();
   const [easterEggActive, setEasterEggActive] = useState(false);
-  const [runningAnimals, setRunningAnimals] = useState<{ id: string; src: string }[]>([]);
-  
-  // The rest of your logic remains the same...
-  const animals = [
-    "https://img.icons8.com/plasticine/100/null/cat.png",
-    "https://img.icons8.com/plasticine/100/null/dog.png",
-    "https://img.icons8.com/plasticine/100/null/rabbit.png",
-    "https://img.icons8.com/plasticine/100/null/penguin.png",
-  ];
 
   useEffect(() => {
     console.error("404 Error: User attempted to access non-existent route:", location.pathname);
   }, [location.pathname]);
 
   const handleGhostClick = () => {
-    setEasterEggActive((prev) => {
-      const isActivating = !prev;
-      if (isActivating) {
-        // Start spawning animals
-        const interval = setInterval(() => {
-          const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
-          const newAnimal = { id: Math.random().toString(), src: randomAnimal };
-          setRunningAnimals((currentAnimals) => [...currentAnimals, newAnimal]);
-        }, 1500);
-        // Store interval to clear it later
-        (window as any).animalInterval = interval;
-      } else {
-        // Stop spawning and clear existing animals
-        clearInterval((window as any).animalInterval);
-        setRunningAnimals([]);
-      }
-      return isActivating;
-    });
-  };
-
-  const handleAnimalComplete = (id: string) => {
-    setRunningAnimals((prev) => prev.filter((animal) => animal.id !== id));
+    setEasterEggActive((prev) => !prev);
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gray-100">
-      <AnimatePresence>
-        {easterEggActive && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="animate-gradient absolute inset-0 z-0"
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {runningAnimals.map((animal) => (
-          <AnimalRunner
-            key={animal.id}
-            id={animal.id}
-            imageSrc={animal.src}
-            onComplete={handleAnimalComplete}
-          />
-        ))}
-      </AnimatePresence>
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-black">
+      
+      <div className="absolute inset-0 z-0">
+        <Orb
+          hoverIntensity={0.5}
+          rotateOnHover={true}
+          forceHoverState={easterEggActive}
+        />
+      </div>
 
       <motion.div
         className="relative z-10 text-center"
@@ -139,16 +58,12 @@ const NotFound = () => {
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
       >
-        {/* --- THIS IS THE CORRECTED PART --- */}
         <button onClick={handleGhostClick} className="cursor-pointer" aria-label="Activate easter egg">
           <Ghost easterEggActive={easterEggActive} />
         </button>
-        {/* The rest of your JSX remains the same */}
 
         <motion.h1
-          className={`mb-4 text-6xl font-bold transition-colors duration-500 ${
-            easterEggActive ? 'text-white' : 'text-black'
-          }`}
+          className="mb-4 text-6xl font-bold text-white"
           animate={{ scale: easterEggActive ? [1, 1.1, 1] : 1 }}
           transition={{
             duration: easterEggActive ? 1 : 0,
@@ -158,27 +73,30 @@ const NotFound = () => {
           404
         </motion.h1>
 
-        <motion.p
-          className={`mb-8 text-xl transition-colors duration-500 ${
-            easterEggActive ? 'text-gray-200' : 'text-gray-600'
-          }`}
-        >
-          Oops! You've discovered a secret place.
+        {/* --- TEXT CHANGED HERE --- */}
+        <motion.p className="mb-8 text-xl text-gray-200">
+          Lost in the cosmos?
         </motion.p>
         
         <motion.a
           href="/"
-          className={`rounded-md px-4 py-2 font-bold transition-all duration-300 ${
-            easterEggActive
-              ? 'bg-white bg-opacity-20 text-white hover:bg-opacity-30'
-              : 'text-blue-500 underline hover:text-blue-700'
-          }`}
+          className="rounded-md bg-white bg-opacity-20 px-4 py-2 font-bold text-white transition-all duration-300 hover:bg-opacity-30"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >
-          Return to Reality
+          {/* --- TEXT CHANGED HERE --- */}
+          Return to Earth
         </motion.a>
       </motion.div>
+
+      <motion.p
+        className="absolute bottom-4 right-4 text-sm text-gray-300"
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 1, duration: 0.5 }}
+      >
+        Designed by Talib
+      </motion.p>
     </div>
   );
 };
