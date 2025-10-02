@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       // This will forward any request starting with /api to your backend
       '/api': {
-        target: 'https://indoornav-app.onrender.com/api/', // ❗️ IMPORTANT: The URL of your backend server
+        target: 'https://indoornav-app.onrender.com', // ❗️ IMPORTANT: The URL of your backend server
         changeOrigin: true, // Recommended for this setup
         secure: false,      // Can be false for local http development
       },
