@@ -32,9 +32,7 @@ app.use(helmet({
   contentSecurityPolicy: { /* ... existing directives ... */ },
 }));
 
-
 // CORS configuration
-
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",")
   : ["http://localhost:8080"];
@@ -77,6 +75,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Redirect root to API
+app.get('/', (req, res) => {
+  res.redirect('/api');
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -99,7 +102,6 @@ app.use('/api', (req, res) => {
   res.status(404).json({
     success: false,
     message: 'API endpoint not found',
-    // 🔄 UPDATED 404 MESSAGE
     availableEndpoints: ['/api/navigation', '/api/admin', '/api/visitors', '/api/feedback', '/api/buildings']
   });
 });
@@ -116,16 +118,17 @@ const startServer = async () => {
     await checkS3Connection();
     // 3. Start the Express server
     const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
+    const HOST = '0.0.0.0'; // Important for Elastic Beanstalk
+    app.listen(PORT, HOST, () => {
       console.log(`
 🚀 Indoor Navigation Server Started Successfully!
+📍 Host: ${HOST}
 📍 Port: ${PORT}
 🌍 Environment: ${process.env.NODE_ENV || 'development'}
-🔗 API Base: http://localhost:${PORT}/api
+🔗 API Base: http://${HOST}:${PORT}/api
       `);
     });
-  } catch (error)
- {
+  } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
@@ -151,6 +154,5 @@ process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...', err);
   process.exit(1);
 });
-
 
 module.exports = app;

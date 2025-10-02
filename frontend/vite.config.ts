@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       // This will forward any request starting with /api to your backend
       '/api': {
-        target: 'http://localhost:5000', // ❗️ IMPORTANT: The URL of your backend server
+        target: 'http://naviguide-app.ap-south-1.elasticbeanstalk.com/', // ❗️ IMPORTANT: The URL of your backend server
         changeOrigin: true, // Recommended for this setup
         secure: false,      // Can be false for local http development
       },
