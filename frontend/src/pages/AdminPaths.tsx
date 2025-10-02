@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -27,9 +28,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Switch } from '@/components/ui/switch'; // <-- ADDED: Import Switch for status toggle
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { Loader2 } from 'lucide-react'; // ✨ ADDED: Spinner icon
 
 // --- API Utility ---
 const api = axios.create({
@@ -64,7 +66,8 @@ interface Path {
   estimatedTime: number;
   isBidirectional: boolean;
   instructions: string;
-  status: 'open' | 'closed' | 'restricted'; // <-- ADDED: Status field
+  reverseInstructions?: string;
+  status: 'open' | 'closed' | 'restricted';
 }
 
 type PathFormData = {
@@ -74,9 +77,10 @@ type PathFormData = {
   distance: number;
   estimatedTime: number;
   instructions: string;
+  reverseInstructions: string;
   difficulty: 'easy' | 'medium' | 'hard';
   isBidirectional: boolean;
-  status: 'open' | 'closed' | 'restricted'; // <-- ADDED: Status field
+  status: 'open' | 'closed' | 'restricted';
   accessibility: {
     wheelchairAccessible: boolean;
     requiresStairs: boolean;
@@ -91,9 +95,10 @@ const INITIAL_PATH_STATE: PathFormData = {
   distance: 10,
   estimatedTime: 30,
   instructions: 'Walk straight towards the destination.',
+  reverseInstructions: '',
   difficulty: 'easy',
   isBidirectional: true,
-  status: 'open', // <-- ADDED: Initial status
+  status: 'open',
   accessibility: {
     wheelchairAccessible: true,
     requiresStairs: false,
@@ -110,6 +115,8 @@ const AdminPaths = () => {
   const [loading, setLoading] = useState({ buildings: true, paths: false });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPath, setCurrentPath] = useState<PathFormData>(INITIAL_PATH_STATE);
+  // ✨ ADDED: State for tracking form submission status
+  const [submissionStatus, setSubmissionStatus] = useState<'idle' | 'processing'>('idle');
 
   // --- Reusable Error Handler ---
   const handleApiError = useCallback((error: unknown, context: string) => {
@@ -195,23 +202,27 @@ const AdminPaths = () => {
       distance: path.distance,
       estimatedTime: path.estimatedTime,
       instructions: path.instructions,
+      reverseInstructions: path.reverseInstructions || '',
       isBidirectional: path.isBidirectional,
-      status: path.status || 'open', // <-- ADDED: Populate status for editing
+      status: path.status || 'open',
       difficulty: 'easy',
       accessibility: { wheelchairAccessible: true, requiresStairs: false },
     });
     setIsModalOpen(true);
   };
 
+  // ✨ UPDATED: handleFormSubmit with new status logic
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmissionStatus('processing');
+
     const { _id, ...pathData } = currentPath;
 
     const submissionData = {
       ...pathData,
       distance: String(pathData.distance),
       estimatedTime: String(pathData.estimatedTime),
-      isBidirectional: String(pathData.isBidirectional), // <-- FIXED: Ensure boolean is sent as a string
+      isBidirectional: String(pathData.isBidirectional),
       accessibility: JSON.stringify(pathData.accessibility),
     };
 
@@ -220,12 +231,16 @@ const AdminPaths = () => {
       : api.post('/admin/paths', submissionData);
 
     try {
-      await apiCall;
-      toast.success(`Path ${_id ? 'updated' : 'created'} successfully!`);
+      const response = await apiCall;
+      toast.success(response.data.message || `Path ${_id ? 'updated' : 'created'} successfully!`);
       setIsModalOpen(false);
-      fetchPaths(selectedBuilding);
+      if (selectedBuilding) {
+        fetchPaths(selectedBuilding);
+      }
     } catch (error) {
       handleApiError(error, _id ? 'update path' : 'create path');
+    } finally {
+      setSubmissionStatus('idle');
     }
   };
 
@@ -240,13 +255,11 @@ const AdminPaths = () => {
     }
   };
 
-  // ADDED: Handler for the new status switch
   const handleStatusChange = async (path: Path) => {
     const newStatus = path.status === 'open' ? 'closed' : 'open';
     try {
         await api.patch(`/admin/paths/${path._id}/status`, { status: newStatus });
         toast.success(`Path status updated to ${newStatus}.`);
-        // Update local state for immediate UI feedback
         setPaths(prevPaths =>
             prevPaths.map(p =>
                 p._id === path._id ? { ...p, status: newStatus } : p
@@ -284,24 +297,19 @@ const AdminPaths = () => {
               <TableHead>From</TableHead>
               <TableHead>To</TableHead>
               <TableHead className="text-center">Distance (m)</TableHead>
-              <TableHead className="text-center">Time (s)</TableHead>
-              <TableHead className="text-center">Bidirectional</TableHead>
-              <TableHead className="text-center">Status</TableHead> {/* <-- ADDED: Status column header */}
+              <TableHead className="text-center">Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading.paths ? (
-              <TableRow><TableCell colSpan={7} className="text-center h-24">Loading paths...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="text-center h-24">Loading paths...</TableCell></TableRow>
             ) : paths.length > 0 ? (
               paths.map((path) => (
                 <TableRow key={path._id}>
                   <TableCell className="font-medium">{path.from.name} (F{path.from.floor})</TableCell>
                   <TableCell className="font-medium">{path.to.name} (F{path.to.floor})</TableCell>
                   <TableCell className="text-center">{path.distance}</TableCell>
-                  <TableCell className="text-center">{path.estimatedTime}</TableCell>
-                  <TableCell className="text-center">{path.isBidirectional ? 'Yes' : 'No'}</TableCell>
-                  {/* v-- ADDED: Status switch cell --v */}
                   <TableCell className="text-center">
                       <div className="flex items-center justify-center space-x-2">
                           <Switch
@@ -315,7 +323,6 @@ const AdminPaths = () => {
                           </Label>
                       </div>
                   </TableCell>
-                  {/* ^-- ADDED: Status switch cell --^ */}
                   <TableCell className="text-right space-x-2">
                     <Button variant="outline" size="sm" onClick={() => openModalForEdit(path)}>Edit</Button>
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(path._id)}>Delete</Button>
@@ -323,7 +330,7 @@ const AdminPaths = () => {
                 </TableRow>
               ))
             ) : (
-              <TableRow><TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
+              <TableRow><TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
                 {!selectedBuilding ? "Please select a building to manage its paths." : "No paths found for this building."}
               </TableCell></TableRow>
             )}
@@ -331,10 +338,17 @@ const AdminPaths = () => {
         </Table>
       </div>
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      {/* --- MODAL FORM --- */}
+      <Dialog open={isModalOpen} onOpenChange={(isOpen) => {
+        setIsModalOpen(isOpen);
+        if (!isOpen) setSubmissionStatus('idle'); // ✨ ADDED: Reset status when modal closes
+      }}>
         <DialogContent className="sm:max-w-[525px]">
           <DialogHeader>
             <DialogTitle>{currentPath._id ? 'Edit Path' : 'Create New Path'}</DialogTitle>
+            <DialogDescription>
+              AI will automatically standardize instructions and generate a reverse path if bidirectional.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleFormSubmit}>
             <div className="grid gap-4 py-4">
@@ -361,25 +375,50 @@ const AdminPaths = () => {
               <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="distance">Distance (meters)</Label>
-                    <Input id="distance" name="distance" type="number" value={currentPath.distance} onChange={e => setCurrentPath(p => ({...p, distance: parseFloat(e.target.value)}))} required />
+                    <Input id="distance" name="distance" type="number" value={currentPath.distance} onChange={e => setCurrentPath(p => ({...p, distance: parseFloat(e.target.value) || 0}))} required />
                   </div>
                    <div>
                     <Label htmlFor="estimatedTime">Estimated Time (seconds)</Label>
-                    <Input id="estimatedTime" name="estimatedTime" type="number" value={currentPath.estimatedTime} onChange={e => setCurrentPath(p => ({...p, estimatedTime: parseInt(e.target.value, 10)}))} required />
+                    <Input id="estimatedTime" name="estimatedTime" type="number" value={currentPath.estimatedTime} onChange={e => setCurrentPath(p => ({...p, estimatedTime: parseInt(e.target.value, 10) || 0}))} required />
                   </div>
               </div>
-               <div>
-                  <Label htmlFor="instructions">Instructions</Label>
-                  <Textarea id="instructions" name="instructions" value={currentPath.instructions} onChange={e => setCurrentPath(p => ({...p, instructions: e.target.value}))} required />
+               
+               <div className="grid gap-2">
+                  <Label htmlFor="instructions">Instructions (A to B)</Label>
+                  <Textarea id="instructions" name="instructions" value={currentPath.instructions} onChange={e => setCurrentPath(p => ({...p, instructions: e.target.value}))} required minLength={10} />
+                  <p className="text-sm text-muted-foreground">This text will be standardized by AI upon saving. (Min. 10 characters)</p>
               </div>
+
+              {currentPath.isBidirectional && (
+                <div className="grid gap-2">
+                  <Label htmlFor="reverseInstructions">Reverse Instructions (B to A)</Label>
+                  <Textarea id="reverseInstructions" name="reverseInstructions" value={currentPath.reverseInstructions} onChange={e => setCurrentPath(p => ({...p, reverseInstructions: e.target.value}))} />
+                  <p className="text-sm text-muted-foreground">
+                    {currentPath._id 
+                      ? "You can manually edit the reverse instructions here."
+                      : "This will be auto-generated by AI when you create the path."
+                    }
+                  </p>
+                </div>
+              )}
+              
               <div className="flex items-center space-x-2">
                   <Checkbox id="isBidirectional" name="isBidirectional" checked={currentPath.isBidirectional} onCheckedChange={c => setCurrentPath(p => ({...p, isBidirectional: !!c}))} />
                   <Label htmlFor="isBidirectional">Path is Bidirectional</Label>
               </div>
             </div>
+            {/* ✨ UPDATED: DialogFooter with dynamic button state */}
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-              <Button type="submit">{currentPath._id ? 'Save Changes' : 'Create Path'}</Button>
+              <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} disabled={submissionStatus === 'processing'}>Cancel</Button>
+              <Button type="submit" disabled={submissionStatus === 'processing'}>
+                {submissionStatus === 'processing' && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {submissionStatus === 'processing' 
+                  ? 'Processing with AI...' 
+                  : (currentPath._id ? 'Save Changes' : 'Create Path')
+                }
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

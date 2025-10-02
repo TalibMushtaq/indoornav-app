@@ -1,4 +1,5 @@
 const express = require('express');
+const fetch = require('node-fetch'); // Make sure you have 'node-fetch' installed
 const { Admin, Building, Landmark, Path, NavigationHistory } = require('../database');
 const { authenticate, requireAdmin, authLimiter, generateToken } = require('../middlewares/auth');
 const { upload, deleteFromS3 } = require('../middlewares/awsupload');
@@ -59,26 +60,19 @@ router.post('/signup', validate(adminSignupSchema), async (req, res) => {
     }
 });
 
-// NEW ROUTE: Reset password with master password
 router.post('/reset-password', authLimiter, validate(resetPasswordSchema), async (req, res) => {
     const { email, masterPassword, newPassword } = req.body;
-
-    // IMPORTANT: Set your MASTER_PASSWORD in your .env file
     if (masterPassword !== process.env.MASTER_PASSWORD) {
         return res.status(401).json({ success: false, message: 'Invalid master password.' });
     }
-
     try {
         const admin = await Admin.findOne({ email });
         if (!admin) {
             return res.status(404).json({ success: false, message: 'Admin with this email does not exist.' });
         }
-
-        admin.password = newPassword; // The pre-save hook in your Admin model will hash this
+        admin.password = newPassword;
         await admin.save();
-
         res.json({ success: true, message: 'Admin password has been reset successfully.' });
-
     } catch (error) {
         console.error('Admin password reset error:', error);
         res.status(500).json({ success: false, message: 'Server error during password reset.' });
@@ -95,7 +89,6 @@ router.post('/signin', authLimiter, validate(adminSigninSchema), async (req, res
         if (!admin.isActive) {
             return res.status(403).json({ success: false, message: 'Your account has been deactivated.' });
         }
-
         res.json({
             success: true,
             message: 'Logged in successfully.',
@@ -110,7 +103,6 @@ router.post('/signin', authLimiter, validate(adminSigninSchema), async (req, res
     }
 });
 
-
 // ===============================
 // PROTECTED ADMIN ROUTES
 // ===============================
@@ -120,28 +112,23 @@ router.get('/me', (req, res) => {
     res.json({ success: true, data: { admin: req.user } });
 });
 
-// New schema definitions (assuming they would be in your schemas file)
 const adminUpdateProfileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters long').optional(),
   email: z.string().email('Invalid email address').optional(),
-}).strip(); // Use strip to remove any extra fields
+}).strip();
 
 const adminChangePasswordSchema = z.object({
     currentPassword: z.string().min(1, 'Current password is required'),
     newPassword: z.string().min(6, 'New password must be at least 6 characters long'),
 });
 
-// NEW ROUTE: Update admin profile (name, email)
 router.put('/me', validate(adminUpdateProfileSchema), async (req, res) => {
     try {
         const { name, email } = req.body;
         const admin = await Admin.findById(req.user._id);
-
         if (!admin) {
             return res.status(404).json({ success: false, message: 'Admin not found.' });
         }
-
-        // Check if email is being updated and if it's already in use
         if (email && email !== admin.email) {
             const existingAdmin = await Admin.findOne({ email });
             if (existingAdmin) {
@@ -149,16 +136,11 @@ router.put('/me', validate(adminUpdateProfileSchema), async (req, res) => {
             }
             admin.email = email;
         }
-
         if (name) {
             admin.name = name;
         }
-
         await admin.save();
-
-        // Return a clean admin object without sensitive data
         const updatedAdmin = { id: admin._id, name: admin.name, email: admin.email, role: admin.role };
-
         res.json({
             success: true,
             message: 'Profile updated successfully.',
@@ -170,26 +152,19 @@ router.put('/me', validate(adminUpdateProfileSchema), async (req, res) => {
     }
 });
 
-// NEW ROUTE: Change admin password
 router.put('/change-password', validate(adminChangePasswordSchema), async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
-
         const admin = await Admin.findById(req.user._id).select('+password');
-
         if (!admin) {
             return res.status(404).json({ success: false, message: 'Admin not found.' });
         }
-
         const isMatch = await admin.matchPassword(currentPassword);
-
         if (!isMatch) {
             return res.status(401).json({ success: false, message: 'Incorrect current password.' });
         }
-
-        admin.password = newPassword; // The pre-save hook in your model will hash it
+        admin.password = newPassword;
         await admin.save();
-
         res.json({ success: true, message: 'Password changed successfully.' });
     } catch (error) {
         console.error('Admin change password error:', error);
@@ -239,19 +214,13 @@ router.get('/buildings', validateQuery(paginationSchema), async (req, res) => {
 
 router.post('/buildings', upload.single('image'), validate(buildingSchema), async (req, res) => {
     try {
-        const buildingData = {
-            ...req.body,
-            createdBy: req.user._id
-        };
-
+        const buildingData = { ...req.body, createdBy: req.user._id };
         if (buildingData.floors && typeof buildingData.floors === 'string') {
             buildingData.floors = JSON.parse(buildingData.floors);
         }
-
         if (req.file) {
             buildingData.image = req.file.location;
         }
-
         const building = new Building(buildingData);
         await building.save();
         await building.populate('createdBy', 'name email');
@@ -278,25 +247,20 @@ router.get('/buildings/:id', async (req, res) => {
 router.put('/buildings/:id', upload.single('image'), validate(buildingUpdateSchema), async (req, res) => {
     try {
         const updateData = { ...req.body };
-
         if (updateData.floors && typeof updateData.floors === 'string') {
             updateData.floors = JSON.parse(updateData.floors);
         }
-
         if (req.file) {
             updateData.image = req.file.location;
         }
-
         const building = await Building.findOneAndUpdate(
             { _id: req.params.id, createdBy: req.user._id },
             updateData,
             { new: true, runValidators: true }
         ).populate('createdBy', 'name email');
-
         if (!building) {
             return res.status(404).json({ success: false, message: 'Building not found.' });
         }
-
         res.json({ success: true, message: 'Building updated successfully.', data: { building } });
     } catch (error) {
         console.error('Building update error:', error);
@@ -310,44 +274,25 @@ router.delete('/buildings/:id', async (req, res) => {
         if (!building) {
             return res.status(404).json({ success: false, message: 'Building not found.' });
         }
-
         const landmarks = await Landmark.find({ building: building._id });
         const landmarkIds = landmarks.map(l => l._id);
         const urlsToDelete = [];
-
         if (building.image) {
             urlsToDelete.push(building.image);
         }
-
         const landmarkImageUrls = landmarks.flatMap(l => l.images.map(img => img.url));
         urlsToDelete.push(...landmarkImageUrls);
-
         if (urlsToDelete.length > 0) {
             try {
                 await deleteFromS3(urlsToDelete);
-                console.log(`Deleted ${urlsToDelete.length} images from S3`);
             } catch (s3Error) {
                 console.error('S3 deletion failed:', s3Error);
             }
         }
-
-        const pathsDeleted = await Path.deleteMany({
-            $or: [
-                { from: { $in: landmarkIds } },
-                { to: { $in: landmarkIds } }
-            ]
-        });
-        console.log(`Deleted ${pathsDeleted.deletedCount} paths`);
-
+        const pathsDeleted = await Path.deleteMany({ $or: [{ from: { $in: landmarkIds } }, { to: { $in: landmarkIds } }] });
         const navHistoryDeleted = await NavigationHistory.deleteMany({ building: building._id });
-        console.log(`Deleted ${navHistoryDeleted.deletedCount} navigation history records`);
-
         await Landmark.deleteMany({ building: building._id });
-        console.log(`Deleted ${landmarks.length} landmarks`);
-
         await Building.findByIdAndDelete(building._id);
-        console.log(`Building "${building.name}" deleted`);
-
         res.json({
             success: true,
             message: 'Building and all associated data deleted successfully.',
@@ -413,23 +358,13 @@ router.post('/landmarks', upload.array('images', 5), validate(landmarkSchema), a
         if (!parentBuilding) {
             return res.status(403).json({ success: false, message: 'You can only add landmarks to your own buildings.' });
         }
-        const existingLandmark = await Landmark.findOne({
-            name: landmarkData.name,
-            building: landmarkData.building,
-            floor: landmarkData.floor,
-            createdBy: req.user._id
-        });
+        const existingLandmark = await Landmark.findOne({ name: landmarkData.name, building: landmarkData.building, floor: landmarkData.floor, createdBy: req.user._id });
         if (existingLandmark) {
             return res.status(400).json({ success: false, message: `A landmark named "${landmarkData.name}" already exists on this floor.` });
         }
-
         if (req.files && req.files.length > 0) {
-            landmarkData.images = req.files.map(file => ({
-                url: file.location,
-                caption: ''
-            }));
+            landmarkData.images = req.files.map(file => ({ url: file.location, caption: '' }));
         }
-
         const landmark = new Landmark(landmarkData);
         await landmark.save();
         res.status(201).json({ success: true, message: 'Landmark created successfully.', data: { landmark } });
@@ -445,19 +380,12 @@ router.put('/landmarks/:id', upload.array('images', 5), validate(landmarkUpdateS
         if (!landmark) {
             return res.status(404).json({ success: false, message: 'Landmark not found.' });
         }
-
         const updateData = { ...req.body };
-
         if (req.files && req.files.length > 0) {
-            const newImages = req.files.map(file => ({
-                url: file.location,
-                caption: ''
-            }));
+            const newImages = req.files.map(file => ({ url: file.location, caption: '' }));
             updateData.images = [...(landmark.images || []), ...newImages];
         }
-
         const updatedLandmark = await Landmark.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
-
         res.json({ success: true, message: 'Landmark updated successfully.', data: { landmark: updatedLandmark } });
     } catch (error) {
         console.error('Landmark update error:', error);
@@ -471,37 +399,17 @@ router.delete('/landmarks/:id', async (req, res) => {
         if (!landmark) {
             return res.status(404).json({ success: false, message: 'Landmark not found.' });
         }
-
         const imageUrls = landmark.images.map(img => img.url).filter(Boolean);
-
         if (imageUrls.length > 0) {
             try {
                 await deleteFromS3(imageUrls);
-                console.log(`Deleted ${imageUrls.length} images from S3`);
             } catch (s3Error) {
                 console.error('S3 deletion failed:', s3Error);
             }
         }
-
-        const pathsDeleted = await Path.deleteMany({
-            $or: [
-                { from: landmark._id },
-                { to: landmark._id }
-            ]
-        });
-        console.log(`Deleted ${pathsDeleted.deletedCount} paths`);
-
-        const navHistoryDeleted = await NavigationHistory.deleteMany({
-            $or: [
-                { fromLandmark: landmark._id },
-                { toLandmark: landmark._id }
-            ]
-        });
-        console.log(`Deleted ${navHistoryDeleted.deletedCount} navigation history records`);
-
+        const pathsDeleted = await Path.deleteMany({ $or: [{ from: landmark._id }, { to: landmark._id }] });
+        const navHistoryDeleted = await NavigationHistory.deleteMany({ $or: [{ fromLandmark: landmark._id }, { toLandmark: landmark._id }] });
         await Landmark.findByIdAndDelete(landmark._id);
-        console.log(`Landmark "${landmark.name}" deleted`);
-
         res.json({
             success: true,
             message: 'Landmark and all associated data deleted successfully.',
@@ -520,143 +428,393 @@ router.delete('/landmarks/:id', async (req, res) => {
 });
 
 // ===============================
-// PATH MANAGEMENT
+// AI-POWERED INSTRUCTION PROCESSING
 // ===============================
-router.post('/paths', validate(pathSchema), async (req, res) => {
-    try {
-        const { from, to, ...rest } = req.body;
-        const createdBy = req.user._id;
+async function processInstructionsWithAI(text, mode, fromLandmarkName, toLandmarkName) {
+  const API_KEY = process.env.GOOGLE_GEMINI_API_KEY;
+  if (!API_KEY) {
+    console.warn("Google Gemini API Key not configured. Using original text.");
+    return text; // Fallback to original text
+  }
+  
+  // Updated the model name based on user's snippet
+  const API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
 
-        if (from === to) {
-            return res.status(400).json({ success: false, message: 'A path must connect two different landmarks.' });
+  let prompt = '';
+  if (mode === 'standardize') {
+    prompt = `You are rewriting indoor navigation instructions. Convert the user's input into clear, step-by-step walking directions.
+
+ROUTE: From "${fromLandmarkName}" to "${toLandmarkName}"
+
+USER'S INSTRUCTIONS:
+"${text}"
+
+REQUIREMENTS:
+- Start with action verbs (Exit, Turn, Walk, Continue, Enter, Take, Pass, etc.)
+- Include clear landmarks/reference points
+- Use simple directional terms: left, right, straight, ahead
+- Keep sentences short and action-focused
+- Remove casual language, filler words, and unnecessary details
+- If stairs/elevators are mentioned, keep them explicit
+- Maintain logical sequence of movements
+
+OUTPUT ONLY THE REWRITTEN INSTRUCTIONS. NO EXTRA TEXT.`;
+
+  } else if (mode === 'reverse') {
+    prompt = `You are reversing indoor walking directions. Convert a path from "${fromLandmarkName}" → "${toLandmarkName}" into the reverse journey from "${toLandmarkName}" → "${fromLandmarkName}".
+
+ORIGINAL INSTRUCTIONS (${fromLandmarkName} → ${toLandmarkName}):
+"${text}"
+
+REVERSAL RULES:
+1. Reverse the ORDER of all steps (last step becomes first)
+2. Flip ALL directional terms:
+   - "Turn left" → "Turn right"
+   - "Turn right" → "Turn left"
+   - "Pass X on your left" → "Pass X on your right"
+   - "Exit" → "Enter" (and vice versa)
+3. Adjust reference points
+4. Keep distances and landmarks the same
+
+OUTPUT ONLY THE REVERSED INSTRUCTIONS. NO EXTRA TEXT.`;
+
+  } else {
+    throw new Error("Invalid AI processing mode specified.");
+  }
+  
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // FIXED: Removed the invalid "system" role from the contents array.
+      // The new error "Please use a valid role: user, model" indicates the "system" role is not supported.
+      body: JSON.stringify({ 
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 2048,
+          topP: 0.8,
+          topK: 40
         }
-
-        const fromLandmark = await Landmark.findOne({ _id: from, createdBy });
-        const toLandmark = await Landmark.findOne({ _id: to, createdBy });
-
-        if (!fromLandmark || !toLandmark) {
-            return res.status(404).json({ success: false, message: 'One or both landmarks not found or you do not have permission to access them.' });
-        }
-        if (fromLandmark.building.toString() !== toLandmark.building.toString()) {
-            return res.status(400).json({ success: false, message: 'Landmarks must be in the same building.' });
-        }
-
-        const existingPath = await Path.findOne({
-            $or: [{ from, to }, { from: to, to: from }]
-        });
-        if (existingPath) {
-            return res.status(400).json({ success: false, message: 'A path between these two landmarks already exists.' });
-        }
-
-        const path = new Path({ from, to, createdBy, ...rest });
-        await path.save();
-        await path.populate([
-            { path: 'from', select: 'name floor' },
-            { path: 'to', select: 'name floor' }
-        ]);
-
-        res.status(201).json({ success: true, message: 'Path created successfully.', data: { path } });
-    } catch (error) {
-        console.error('Path creation error:', error);
-        res.status(500).json({ success: false, message: 'Server error creating path.' });
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('Gemini API Error:', response.status, errorBody);
+      
+      // Handle specific API errors
+      if (response.status === 429) {
+        console.warn('AI API rate limit reached. Using original text.');
+        return text;
+      } else if (response.status === 400) {
+        console.warn('AI API bad request. Using original text.');
+        return text;
+      }
+      
+      throw new Error(`AI API call failed with status: ${response.status}`);
     }
+    
+    const data = await response.json();
+    
+    if (!data.candidates || data.candidates.length === 0) {
+      console.warn('AI returned no candidates. Using original text.');
+      return text;
+    }
+
+    const candidate = data.candidates[0];
+    let result = null;
+
+    // Check for token limit issue first
+    if (candidate.finishReason === 'MAX_TOKENS') {
+      console.warn(`AI hit MAX_TOKENS limit for ${mode} mode. Using original text.`);
+      return text;
+    }
+
+    // Handle safety/content filtering
+    if (candidate.finishReason === 'SAFETY' || candidate.finishReason === 'RECITATION') {
+      console.warn(`AI filtered content due to ${candidate.finishReason}. Using original text.`);
+      return text;
+    }
+
+    // Extract text from response
+    if (candidate.content && candidate.content.parts && candidate.content.parts[0]?.text) {
+      result = candidate.content.parts[0].text;
+    } else if (candidate.output) {
+      result = candidate.output;
+    }
+
+    if (!result) {
+      console.warn("AI response missing text content. Using original text.");
+      console.error("Full AI response:", JSON.stringify(data, null, 2));
+      return text;
+    }
+
+    // Clean up response
+    result = result.trim();
+    result = result.replace(/^(Here are the|Here's the|The) (rewritten|reversed) instructions?:?\s*/i, '');
+    result = result.replace(/^Instructions?:?\s*/i, '');
+    result = result.replace(/```.*?\n?/g, ''); // Remove code blocks
+    
+    return result || text; // Fallback if result becomes empty after cleaning
+    
+  } catch (error) {
+    // Network errors, timeouts, etc.
+    console.error(`Error in processInstructionsWithAI (${mode} mode):`, error.message);
+    console.warn('AI processing failed. Using original text as fallback.');
+    return text; // Always return original text on any error
+  }
+}
+// ===============================
+// PATH MANAGEMENT (UPDATED ROUTE)
+// ===============================
+
+router.get('/paths', validateQuery(paginationSchema.merge(searchSchema)), async (req, res) => {
+  try {
+    const { page = 1, limit = 10, building, floor } = req.query;
+    const skip = (page - 1) * limit;
+
+    let query = { createdBy: req.user._id, isActive: true };
+
+    if (building) {
+      const landmarkIds = await Landmark.find({ 
+        building, 
+        createdBy: req.user._id 
+      }).distinct('_id');
+      
+      if (landmarkIds.length === 0) {
+        return res.json({
+          success: true,
+          data: { paths: [] },
+          pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), totalPages: 0 }
+        });
+      }
+
+      query.$or = [
+        { from: { $in: landmarkIds }, to: { $in: landmarkIds } }
+      ];
+    }
+
+    const [paths, total] = await Promise.all([
+      Path.find(query)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate('from', 'name floor building')
+          .populate('to', 'name floor building'),
+      Path.countDocuments(query)
+    ]);
+
+    res.json({
+      success: true,
+      data: { paths },
+      pagination: { 
+        total, 
+        page: parseInt(page), 
+        limit: parseInt(limit), 
+        totalPages: Math.ceil(total / limit) 
+      }
+    });
+  } catch (error) {
+    console.error('Get paths error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error fetching paths.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 });
 
-router.get('/paths', validateQuery(paginationSchema.merge(z.object({ building: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid building ID') }))), async (req, res) => {
-    try {
-        const { building, page = 1, limit = 10 } = req.query;
-        const skip = (page - 1) * limit;
+// ===============================
+// PATH CREATION WITH IMPROVED ERROR HANDLING
+// ===============================
+router.post('/paths', validate(pathSchema), async (req, res) => {
+  try {
+    const { from, to, isBidirectional, instructions, ...rest } = req.body;
+    const createdBy = req.user._id;
 
-        const buildingLandmarks = await Landmark.find({ building, createdBy: req.user._id }).select('_id');
-        const landmarkIds = buildingLandmarks.map(l => l._id);
-
-        const query = {
-            from: { $in: landmarkIds },
-            to: { $in: landmarkIds },
-            createdBy: req.user._id
-        };
-
-        const [paths, total] = await Promise.all([
-            Path.find(query)
-                .populate('from', 'name floor')
-                .populate('to', 'name floor')
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit),
-            Path.countDocuments(query)
-        ]);
-
-        res.json({
-            success: true,
-            data: { paths },
-            pagination: { total, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(total / limit) }
-        });
-    } catch (error) {
-        console.error('Get paths error:', error);
-        res.status(500).json({ success: false, message: 'Server error fetching paths.' });
+    // Validation checks
+    if (from === to) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'A path must connect two different landmarks.' 
+      });
     }
+
+    const [fromLandmark, toLandmark] = await Promise.all([
+      Landmark.findOne({ _id: from, createdBy }),
+      Landmark.findOne({ _id: to, createdBy })
+    ]);
+
+    if (!fromLandmark || !toLandmark) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'One or both landmarks not found.' 
+      });
+    }
+
+    if (fromLandmark.building.toString() !== toLandmark.building.toString()) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Landmarks must be in the same building.' 
+      });
+    }
+
+    const existingPath = await Path.findOne({ 
+      $or: [{ from, to }, { from: to, to: from }] 
+    });
+    
+    if (existingPath) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'A path between these two landmarks already exists.' 
+      });
+    }
+
+    // AI Processing with automatic fallback
+    console.log("Processing instructions with AI...");
+    let standardizedInstructions = instructions;
+    let generatedReverseInstructions = null;
+    let aiUsed = { standardize: false, reverse: false };
+
+    try {
+      const processed = await processInstructionsWithAI(
+        instructions,
+        'standardize',
+        fromLandmark.name,
+        toLandmark.name
+      );
+      
+      // Check if AI actually processed it (not just fallback)
+      if (processed !== instructions) {
+        standardizedInstructions = processed;
+        aiUsed.standardize = true;
+      }
+    } catch (error) {
+      console.warn('Standardization failed, using original:', error.message);
+      standardizedInstructions = instructions;
+    }
+
+    if (isBidirectional) {
+      try {
+        const reversed = await processInstructionsWithAI(
+          instructions,
+          'reverse',
+          fromLandmark.name,
+          toLandmark.name
+        );
+        
+        if (reversed !== instructions) {
+          generatedReverseInstructions = reversed;
+          aiUsed.reverse = true;
+        }
+      } catch (error) {
+        console.warn('Reverse generation failed:', error.message);
+        generatedReverseInstructions = null;
+      }
+    }
+
+    const pathData = { 
+      from, 
+      to, 
+      isBidirectional, 
+      createdBy, 
+      ...rest, 
+      instructions: standardizedInstructions, 
+      reverseInstructions: generatedReverseInstructions 
+    };
+
+    const path = new Path(pathData);
+    await path.save();
+    await path.populate([
+      { path: 'from', select: 'name floor' }, 
+      { path: 'to', select: 'name floor' }
+    ]);
+
+    // Inform user about AI processing status
+    let message = 'Path created successfully.';
+    if (aiUsed.standardize && aiUsed.reverse) {
+      message += ' AI enhanced both instructions.';
+    } else if (aiUsed.standardize) {
+      message += ' AI enhanced forward instructions.';
+    } else if (aiUsed.reverse) {
+      message += ' AI enhanced reverse instructions.';
+    } else {
+      message += ' (AI unavailable - saved original instructions)';
+    }
+
+    res.status(201).json({ 
+      success: true, 
+      message,
+      data: { path },
+      aiProcessing: aiUsed
+    });
+
+  } catch (error) {
+    console.error('Path creation error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error creating path. Please try again.' 
+    });
+  }
 });
 
 router.put('/paths/:id', validate(pathUpdateSchema), async (req, res) => {
-    try {
-        const path = await Path.findOneAndUpdate(
-            { _id: req.params.id, createdBy: req.user._id },
-            req.body,
-            { new: true, runValidators: true }
-        ).populate('from to', 'name floor');
-
-        if (!path) {
-            return res.status(404).json({ success: false, message: 'Path not found.' });
-        }
-        res.json({ success: true, message: 'Path updated successfully.', data: { path } });
-    } catch (error) {
-        console.error('Path update error:', error);
-        res.status(500).json({ success: false, message: 'Server error updating path.' });
+  try {
+    const path = await Path.findOneAndUpdate(
+      { _id: req.params.id, createdBy: req.user._id },
+      req.body,
+      { new: true, runValidators: true }
+    ).populate('from to', 'name floor');
+    if (!path) {
+      return res.status(404).json({ success: false, message: 'Path not found.' });
     }
+    res.json({ success: true, message: 'Path updated successfully.', data: { path } });
+  } catch (error) {
+    console.error('Path update error:', error);
+    res.status(500).json({ success: false, message: 'Server error updating path.' });
+  }
 });
 
-// @route   PATCH /api/admin/paths/:id/status
-// @desc    Update the status of a single path
-// @access  Admin
 router.patch('/paths/:id/status', async (req, res) => {
-    try {
-        const { status } = req.body;
-
-        // Basic validation
-        if (!['open', 'closed', 'restricted'].includes(status)) {
-            return res.status(400).json({ success: false, message: 'Invalid status value.' });
-        }
-
-        const path = await Path.findOneAndUpdate(
-            { _id: req.params.id, createdBy: req.user._id },
-            { $set: { status: status } },
-            { new: true }
-        );
-
-        if (!path) {
-            return res.status(404).json({ success: false, message: 'Path not found.' });
-        }
-
-        res.json({ success: true, message: `Path status updated to "${status}".`, data: { path } });
-
-    } catch (error) {
-        console.error('Path status update error:', error);
-        res.status(500).json({ success: false, message: 'Server error updating path status.' });
+  try {
+    const { status } = req.body;
+    if (!['open', 'closed', 'restricted'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status value.' });
     }
+    const path = await Path.findOneAndUpdate(
+      { _id: req.params.id, createdBy: req.user._id },
+      { $set: { status: status } },
+      { new: true }
+    );
+    if (!path) {
+      return res.status(404).json({ success: false, message: 'Path not found.' });
+    }
+    res.json({ success: true, message: `Path status updated to "${status}".`, data: { path } });
+  } catch (error) {
+    console.error('Path status update error:', error);
+    res.status(500).json({ success: false, message: 'Server error updating path status.' });
+  }
 });
 
 router.delete('/paths/:id', async (req, res) => {
-    try {
-        const path = await Path.findOneAndDelete({ _id: req.params.id, createdBy: req.user._id });
-        if (!path) {
-            return res.status(404).json({ success: false, message: 'Path not found.' });
-        }
-        res.json({ success: true, message: 'Path deleted successfully.' });
-    } catch (error) {
-        console.error('Path delete error:', error);
-        res.status(500).json({ success: false, message: 'Server error deleting path.' });
+  try {
+    const path = await Path.findOneAndDelete({ _id: req.params.id, createdBy: req.user._id });
+    if (!path) {
+      return res.status(404).json({ success: false, message: 'Path not found.' });
     }
+    res.json({ success: true, message: 'Path deleted successfully.' });
+  } catch (error) {
+    console.error('Path delete error:', error);
+    res.status(500).json({ success: false, message: 'Server error deleting path.' });
+  }
 });
+
 
 // ===============================
 // DASHBOARD & ANALYTICS

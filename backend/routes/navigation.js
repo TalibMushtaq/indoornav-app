@@ -1,6 +1,5 @@
 const express = require('express');
 const { Building, Landmark, Path, NavigationHistory } = require('../database');
-// Assuming you have a standard 'auth' middleware that requires a logged-in user.
 const { authenticate, optionalAuth } = require('../middlewares/auth');
 const {
   validate,
@@ -12,39 +11,68 @@ const {
 
 const router = express.Router();
 
-// --- ALGORITHM IMPLEMENTATION ---
+// --- OPTIMIZED ALGORITHM IMPLEMENTATION ---
 
-// More efficient Priority Queue for Dijkstra's Algorithm
-class PriorityQueue {
+// Binary Heap Priority Queue (much faster than linear insertion)
+class MinHeap {
   constructor() {
-    this.collection = [];
+    this.heap = [];
   }
+
   enqueue(element) {
-    if (this.isEmpty()) {
-      this.collection.push(element);
-    } else {
-      let added = false;
-      for (let i = 1; i <= this.collection.length; i++) {
-        if (element.distance < this.collection[i - 1].distance) {
-          this.collection.splice(i - 1, 0, element);
-          added = true;
-          break;
-        }
-      }
-      if (!added) {
-        this.collection.push(element);
-      }
+    this.heap.push(element);
+    this.bubbleUp(this.heap.length - 1);
+  }
+
+  dequeue() {
+    if (this.heap.length === 0) return null;
+    if (this.heap.length === 1) return this.heap.pop();
+    
+    const min = this.heap[0];
+    this.heap[0] = this.heap.pop();
+    this.bubbleDown(0);
+    return min;
+  }
+
+  bubbleUp(index) {
+    while (index > 0) {
+      const parentIndex = Math.floor((index - 1) / 2);
+      if (this.heap[parentIndex].distance <= this.heap[index].distance) break;
+      
+      [this.heap[parentIndex], this.heap[index]] = [this.heap[index], this.heap[parentIndex]];
+      index = parentIndex;
     }
   }
-  dequeue() {
-    return this.collection.shift();
+
+  bubbleDown(index) {
+    while (true) {
+      let minIndex = index;
+      const leftChild = 2 * index + 1;
+      const rightChild = 2 * index + 2;
+
+      if (leftChild < this.heap.length && 
+          this.heap[leftChild].distance < this.heap[minIndex].distance) {
+        minIndex = leftChild;
+      }
+
+      if (rightChild < this.heap.length && 
+          this.heap[rightChild].distance < this.heap[minIndex].distance) {
+        minIndex = rightChild;
+      }
+
+      if (minIndex === index) break;
+
+      [this.heap[index], this.heap[minIndex]] = [this.heap[minIndex], this.heap[index]];
+      index = minIndex;
+    }
   }
+
   isEmpty() {
-    return this.collection.length === 0;
+    return this.heap.length === 0;
   }
 }
 
-// Dijkstra's Algorithm Implementation using a Priority Queue
+// Optimized Graph with better Dijkstra implementation
 class Graph {
   constructor() {
     this.nodes = new Map();
@@ -59,20 +87,23 @@ class Graph {
   }
 
   addEdge(from, to, weight, pathData) {
-    this.adjacencyList.get(from)?.push({
+    if (!this.adjacencyList.has(from)) return;
+    
+    this.adjacencyList.get(from).push({
       node: to,
       weight,
       path: pathData
     });
 
-    if (pathData.isBidirectional) {
-      this.adjacencyList.get(to)?.push({
+    // Handle bidirectional paths
+    if (pathData.isBidirectional && this.adjacencyList.has(to)) {
+      this.adjacencyList.get(to).push({
         node: from,
         weight,
         path: {
           ...pathData,
-          instructions: `(Return) ${pathData.instructions}`, // Clarify reverse instructions
-          images: pathData.images.slice().reverse()
+          instructions: pathData.reverseInstructions || `Return via: ${pathData.instructions}`,
+          images: pathData.images ? [...pathData.images].reverse() : []
         }
       });
     }
@@ -82,7 +113,13 @@ class Graph {
     const distances = new Map();
     const previous = new Map();
     const pathDetails = new Map();
-    const pq = new PriorityQueue();
+    const visited = new Set();
+    const pq = new MinHeap();
+
+    // Early exit if start or end don't exist
+    if (!this.nodes.has(start) || !this.nodes.has(end)) {
+      return { path: [], totalDistance: Infinity, totalTime: 0 };
+    }
 
     // Initialize distances
     for (let node of this.nodes.keys()) {
@@ -92,22 +129,30 @@ class Graph {
     pq.enqueue({ node: start, distance: 0 });
 
     while (!pq.isEmpty()) {
-      const { node: currentNode } = pq.dequeue();
+      const { node: currentNode, distance: currentDistance } = pq.dequeue();
 
+      // Skip if already visited (handles duplicate entries in heap)
+      if (visited.has(currentNode)) continue;
+      visited.add(currentNode);
+
+      // Early termination - we found the shortest path to end
       if (currentNode === end) break;
+
+      // Skip if this is an outdated entry
+      if (currentDistance > distances.get(currentNode)) continue;
 
       const neighbors = this.adjacencyList.get(currentNode) || [];
 
       for (let neighbor of neighbors) {
+        // Skip visited nodes
+        if (visited.has(neighbor.node)) continue;
+
         // Apply preference filters
-        if (preferences.avoidStairs && neighbor.path.accessibility?.requiresStairs) {
-          continue;
-        }
-        if (preferences.wheelchairAccessible && !neighbor.path.accessibility?.wheelchairAccessible) {
+        if (!this.meetsPreferences(neighbor.path, preferences)) {
           continue;
         }
 
-        const distance = distances.get(currentNode) + neighbor.weight;
+        const distance = currentDistance + neighbor.weight;
 
         if (distance < distances.get(neighbor.node)) {
           distances.set(neighbor.node, distance);
@@ -119,13 +164,42 @@ class Graph {
     }
 
     // Reconstruct path
+    return this.reconstructPath(start, end, distances, previous, pathDetails);
+  }
+
+  meetsPreferences(path, preferences) {
+    if (!path) return true;
+
+    // Check accessibility preferences
+    if (preferences.avoidStairs && path.accessibility?.requiresStairs) {
+      return false;
+    }
+    if (preferences.wheelchairAccessible && !path.accessibility?.wheelchairAccessible) {
+      return false;
+    }
+    if (preferences.avoidElevators && path.accessibility?.requiresElevator) {
+      return false;
+    }
+    if (preferences.maxDifficulty) {
+      const difficultyLevel = { easy: 1, medium: 2, hard: 3 };
+      if (difficultyLevel[path.difficulty] > difficultyLevel[preferences.maxDifficulty]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  reconstructPath(start, end, distances, previous, pathDetails) {
     const path = [];
     let current = end;
 
+    // No path found
     if (distances.get(current) === Infinity) {
-        return { path: [], totalDistance: Infinity, totalTime: 0 };
+      return { path: [], totalDistance: Infinity, totalTime: 0 };
     }
 
+    // Build path from end to start
     while (current !== undefined) {
       const nodeData = this.nodes.get(current);
       const pathData = pathDetails.get(current);
@@ -144,6 +218,81 @@ class Graph {
       totalTime: path.reduce((sum, step) => sum + (step.path?.estimatedTime || 0), 0)
     };
   }
+
+  // A* Algorithm (optional upgrade for even better performance)
+  astar(start, end, preferences = {}) {
+    const gScore = new Map(); // Actual distance from start
+    const fScore = new Map(); // gScore + heuristic
+    const previous = new Map();
+    const pathDetails = new Map();
+    const visited = new Set();
+    const pq = new MinHeap();
+
+    if (!this.nodes.has(start) || !this.nodes.has(end)) {
+      return { path: [], totalDistance: Infinity, totalTime: 0 };
+    }
+
+    const heuristic = (nodeId) => {
+      const node = this.nodes.get(nodeId);
+      const endNode = this.nodes.get(end);
+      
+      // Euclidean distance heuristic (if coordinates available)
+      if (node.coordinates && endNode.coordinates) {
+        const dx = node.coordinates.x - endNode.coordinates.x;
+        const dy = node.coordinates.y - endNode.coordinates.y;
+        
+        // --- FIX IMPLEMENTED HERE ---
+        // Safely parse floor strings to integers before subtraction.
+        const startFloor = parseInt(node.floor, 10) || 0;
+        const endFloor = parseInt(endNode.floor, 10) || 0;
+        const dz = (startFloor - endFloor) * 5; // Assume 5m per floor
+        
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+      }
+      
+      // Floor difference heuristic as a fallback
+      const startFloor = parseInt(node.floor, 10) || 0;
+      const endFloor = parseInt(endNode.floor, 10) || 0;
+      return Math.abs(startFloor - endFloor) * 5;
+    };
+
+    for (let node of this.nodes.keys()) {
+      gScore.set(node, Infinity);
+      fScore.set(node, Infinity);
+    }
+    
+    gScore.set(start, 0);
+    fScore.set(start, heuristic(start));
+    pq.enqueue({ node: start, distance: fScore.get(start) });
+
+    while (!pq.isEmpty()) {
+      const { node: currentNode } = pq.dequeue();
+
+      if (visited.has(currentNode)) continue;
+      visited.add(currentNode);
+
+      if (currentNode === end) break;
+
+      const neighbors = this.adjacencyList.get(currentNode) || [];
+
+      for (let neighbor of neighbors) {
+        if (visited.has(neighbor.node)) continue;
+        if (!this.meetsPreferences(neighbor.path, preferences)) continue;
+
+        const tentativeGScore = gScore.get(currentNode) + neighbor.weight;
+
+        if (tentativeGScore < gScore.get(neighbor.node)) {
+          previous.set(neighbor.node, currentNode);
+          pathDetails.set(neighbor.node, neighbor.path);
+          gScore.set(neighbor.node, tentativeGScore);
+          fScore.set(neighbor.node, tentativeGScore + heuristic(neighbor.node));
+          pq.enqueue({ node: neighbor.node, distance: fScore.get(neighbor.node) });
+        }
+      }
+    }
+
+    return this.reconstructPath(start, end, gScore, previous, pathDetails);
+  }
 }
 
 
@@ -154,39 +303,37 @@ class Graph {
 // @access  Public
 router.get('/buildings', validateQuery(paginationSchema), async (req, res) => {
   try {
-    // Convert query params to numbers
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
     const skip = (page - 1) * limit;
 
-    const buildingsPromise = Building.aggregate([
-      { $match: { isActive: true } },
-      { $sort: { name: 1 } },
-      { $skip: skip },
-      { $limit: limit }, // Now limit is a number
-      {
-        $lookup: {
-          from: 'landmarks',
-          localField: '_id',
-          foreignField: 'building',
-          pipeline: [{ $match: { isActive: true } }, { $count: 'count' }],
-          as: 'landmarkData'
+    const [buildings, total] = await Promise.all([
+      Building.aggregate([
+        { $match: { isActive: true } },
+        { $sort: { name: 1 } },
+        { $skip: skip },
+        { $limit: limit },
+        {
+          $lookup: {
+            from: 'landmarks',
+            localField: '_id',
+            foreignField: 'building',
+            pipeline: [{ $match: { isActive: true } }, { $count: 'count' }],
+            as: 'landmarkData'
+          }
+        },
+        {
+          $project: {
+            name: 1,
+            description: 1,
+            address: 1,
+            floors: 1,
+            landmarksCount: { $ifNull: [{ $arrayElemAt: ['$landmarkData.count', 0] }, 0] }
+          }
         }
-      },
-      {
-        $project: {
-          name: 1,
-          description: 1,
-          address: 1,
-          floors: 1,
-          landmarksCount: { $ifNull: [{ $arrayElemAt: ['$landmarkData.count', 0] }, 0] }
-        }
-      }
+      ]),
+      Building.countDocuments({ isActive: true })
     ]);
-
-    const totalPromise = Building.countDocuments({ isActive: true });
-
-    const [buildings, total] = await Promise.all([buildingsPromise, totalPromise]);
 
     res.json({
       success: true,
@@ -221,7 +368,7 @@ router.get('/buildings/:id/landmarks',
     const { type, floor, q } = req.query;
     const buildingId = req.params.id;
 
-    const building = await Building.findById(buildingId);
+    const building = await Building.findById(buildingId).lean();
     if (!building || !building.isActive) {
       return res.status(404).json({
         success: false,
@@ -235,7 +382,7 @@ router.get('/buildings/:id/landmarks',
     };
 
     if (type) query.type = type;
-    if (floor) query.floor = floor;
+    if (floor) query.floor = floor; // Note: floor is a string, so direct comparison works
     if (q) {
       const regex = new RegExp(q, 'i');
       query.$or = [
@@ -247,7 +394,8 @@ router.get('/buildings/:id/landmarks',
 
     const landmarks = await Landmark.find(query)
       .select('name description type floor coordinates roomNumber images accessibility')
-      .sort({ floor: 1, name: 1 });
+      .sort({ floor: 1, name: 1 })
+      .lean();
 
     const landmarksByFloor = landmarks.reduce((acc, landmark) => {
         (acc[landmark.floor] = acc[landmark.floor] || []).push(landmark);
@@ -262,8 +410,8 @@ router.get('/buildings/:id/landmarks',
           name: building.name,
           floors: building.floors
         },
-        landmarks, // Keep flat list for easier client-side filtering
-        landmarksByFloor, // Provide grouped view
+        landmarks,
+        landmarksByFloor,
         totalCount: landmarks.length
       }
     });
@@ -277,25 +425,21 @@ router.get('/buildings/:id/landmarks',
 });
 
 // @route   POST /api/navigation/route
-// @desc    Calculate route between two landmarks
+// @desc    Calculate route between two landmarks (OPTIMIZED)
 // @access  Public (with optional auth for history)
 router.post('/route', async (req, res) => {
   try {
-    // Apply optional auth manually
+    // Optional authentication
     if (req.headers.authorization) {
       try {
-        // Basic token extraction - adapt this to match your auth logic
         const token = req.headers.authorization.split(' ')[1];
         // Add your token verification logic here
-        // For now, we'll skip the actual verification
-        // req.user = decoded user from token
       } catch (authError) {
-        // Continue without user if auth fails
         console.log('Optional auth failed:', authError.message);
       }
     }
 
-    // Manual validation using Zod
+    // Validation
     const validationResult = navigationRequestSchema.safeParse(req.body);
     if (!validationResult.success) {
       return res.status(400).json({
@@ -308,15 +452,16 @@ router.post('/route', async (req, res) => {
       });
     }
 
-    const { building: buildingId, from: fromId, to: toId, preferences = {} } = validationResult.data;
+    const { building: buildingId, from: fromId, to: toId, preferences = {}, algorithm = 'dijkstra' } = validationResult.data;
 
-    // Fetch building and landmarks concurrently
+    // Fetch data concurrently with lean() for better performance
     const [building, fromLandmark, toLandmark] = await Promise.all([
       Building.findById(buildingId).lean(),
       Landmark.findById(fromId).lean(),
       Landmark.findById(toId).lean()
     ]);
 
+    // Validation
     if (!building || !building.isActive) {
       return res.status(400).json({ success: false, message: 'Building not found' });
     }
@@ -327,6 +472,7 @@ router.post('/route', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid "to" landmark' });
     }
 
+    // Same location check
     if (fromId === toId) {
       return res.json({
         success: true,
@@ -347,31 +493,38 @@ router.post('/route', async (req, res) => {
         }
       });
     }
+    
+    // Get all active landmark IDs for the building once
+    const landmarkIdsInBuilding = await Landmark.distinct('_id', { building: buildingId, isActive: true });
 
-    // Get all active landmarks for this building
-    const landmarks = await Landmark.find({ building: buildingId, isActive: true });
-
-    // OPTIMIZATION: Only fetch paths connected to landmarks within this building
-    const landmarkIds = landmarks.map(l => l._id);
-    const buildingPaths = await Path.find({
+    // Fetch landmarks and paths concurrently
+    const [landmarks, buildingPaths] = await Promise.all([
+      Landmark.find({ _id: { $in: landmarkIdsInBuilding } }).lean(),
+      Path.find({
         isActive: true,
-        from: { $in: landmarkIds },
-        to: { $in: landmarkIds }
-    });
+        from: { $in: landmarkIdsInBuilding },
+        to: { $in: landmarkIdsInBuilding } // Ensures both ends are in the building
+      }).lean()
+    ]);
 
     // Build graph
     const graph = new Graph();
-    landmarks.forEach(landmark => graph.addNode(landmark._id.toString(), landmark.toObject()));
+    landmarks.forEach(landmark => 
+      graph.addNode(landmark._id.toString(), landmark)
+    );
     buildingPaths.forEach(path => {
       graph.addEdge(
         path.from.toString(),
         path.to.toString(),
         path.distance,
-        path.toObject()
+        path
       );
     });
 
-    const result = graph.dijkstra(fromId, toId, preferences);
+    // Calculate route (use A* if requested, otherwise Dijkstra)
+    const result = algorithm === 'astar' 
+      ? graph.astar(fromId, toId, preferences)
+      : graph.dijkstra(fromId, toId, preferences);
 
     if (result.totalDistance === Infinity) {
       return res.status(404).json({
@@ -384,14 +537,15 @@ router.post('/route', async (req, res) => {
     const steps = result.path.map((step, index) => ({
       stepNumber: index + 1,
       landmark: step.landmark,
-      path: index > 0 ? result.path[index].path : null, // The path leads TO this step's landmark
-      instructions: index === 0 ?
-        `Start at ${step.landmark.name}.` :
-        result.path[index].path.instructions,
+      path: index > 0 ? result.path[index].path : null,
+      instructions: index === 0 
+        ? `Start at ${step.landmark.name}` 
+        : result.path[index].path.instructions,
       distance: index > 0 ? result.path[index].path.distance : 0,
       estimatedTime: index > 0 ? result.path[index].path.estimatedTime : 0,
       images: index > 0 ? result.path[index].path.images : [],
-      difficulty: index > 0 ? result.path[index].path.difficulty : 'easy'
+      difficulty: index > 0 ? result.path[index].path.difficulty : 'easy',
+      accessibility: index > 0 ? result.path[index].path.accessibility : null
     }));
 
     const routeData = {
@@ -399,6 +553,7 @@ router.post('/route', async (req, res) => {
       totalDistance: Math.round(result.totalDistance),
       totalTime: result.totalTime,
       preferences,
+      algorithm: algorithm || 'dijkstra',
       building: { id: building._id, name: building.name },
       from: fromLandmark,
       to: toLandmark
@@ -412,7 +567,7 @@ router.post('/route', async (req, res) => {
         building: buildingId,
         fromLandmark: fromId,
         toLandmark: toId,
-        route: steps.slice(1).map(step => ({ // Exclude the start step which has no path
+        route: steps.slice(1).map(step => ({
           landmark: step.landmark._id,
           path: step.path?._id,
           stepNumber: step.stepNumber
@@ -438,7 +593,8 @@ router.post('/route', async (req, res) => {
 router.get('/landmarks/:id', async (req, res) => {
   try {
     const landmark = await Landmark.findById(req.params.id)
-      .populate('building', 'name floors');
+      .populate('building', 'name floors')
+      .lean();
 
     if (!landmark || !landmark.isActive) {
       return res.status(404).json({ success: false, message: 'Landmark not found' });
@@ -447,7 +603,9 @@ router.get('/landmarks/:id', async (req, res) => {
     const connectedPaths = await Path.find({
       $or: [{ from: landmark._id }, { to: landmark._id, isBidirectional: true }],
       isActive: true
-    }).populate('from to', 'name type floor');
+    })
+    .populate('from to', 'name type floor')
+    .lean();
 
     const connections = connectedPaths.map(path => {
       const isFromCurrent = path.from._id.toString() === landmark._id.toString();
@@ -458,7 +616,7 @@ router.get('/landmarks/:id', async (req, res) => {
         distance: path.distance,
         estimatedTime: path.estimatedTime,
         difficulty: path.difficulty,
-        instructions: isFromCurrent ? path.instructions : `(Return) ${path.instructions}`,
+        instructions: isFromCurrent ? path.instructions : (path.reverseInstructions || `Return via: ${path.instructions}`),
         accessibility: path.accessibility
       };
     });
@@ -494,8 +652,11 @@ router.put('/history/:id/status', authenticate, async (req, res) => {
     }
 
     const navigation = await NavigationHistory.findOneAndUpdate(
-      { _id: navigationId, user: req.user._id }, // Ensure user owns this record
-      { status, completedAt: status === 'completed' ? new Date() : undefined },
+      { _id: navigationId, user: req.user._id },
+      { 
+        status, 
+        completedAt: status === 'completed' ? new Date() : undefined,
+      },
       { new: true }
     );
 
@@ -524,7 +685,9 @@ router.put('/history/:id/status', authenticate, async (req, res) => {
 router.get('/search', validateQuery(searchSchema.merge(paginationSchema)), async (req, res) => {
     try {
         const { q, type, floor, building, page, limit } = req.query;
-        const skip = (page - 1) * limit;
+        const pageNum = parseInt(page, 10) || 1;
+        const limitNum = parseInt(limit, 10) || 10;
+        const skip = (pageNum - 1) * limitNum;
 
         if (!q || q.trim().length < 2) {
             return res.status(400).json({
@@ -547,26 +710,27 @@ router.get('/search', validateQuery(searchSchema.merge(paginationSchema)), async
         if (floor) query.floor = floor;
         if (type) query.type = type;
 
-        const landmarksPromise = Landmark.find(query)
+        const [landmarks, total] = await Promise.all([
+          Landmark.find(query)
             .populate('building', 'name address')
             .select('name description type floor coordinates roomNumber images building')
             .sort({ name: 1 })
             .skip(skip)
-            .limit(limit);
-
-        const totalPromise = Landmark.countDocuments(query);
-        const [landmarks, total] = await Promise.all([landmarksPromise, totalPromise]);
+            .limit(limitNum)
+            .lean(),
+          Landmark.countDocuments(query)
+        ]);
 
         res.json({
             success: true,
             data: {
                 landmarks,
                 pagination: {
-                    current: page,
-                    pages: Math.ceil(total / limit),
+                    current: pageNum,
+                    pages: Math.ceil(total / limitNum),
                     total,
-                    hasNext: page * limit < total,
-                    hasPrev: page > 1
+                    hasNext: pageNum * limitNum < total,
+                    hasPrev: pageNum > 1
                 },
                 searchQuery: q
             }

@@ -191,6 +191,9 @@ const pathSchema = new mongoose.Schema({
   estimatedTime: { type: Number, required: true, min: 0 },
   difficulty: { type: String, enum: ['easy', 'medium', 'hard'], default: 'easy' },
   instructions: { type: String, required: true, trim: true },
+
+  reverseInstructions: { type: String, trim: true },
+
   images: [{ url: String, caption: String, stepNumber: Number }],
   accessibility: {
     wheelchairAccessible: { type: Boolean, default: true },

@@ -77,7 +77,7 @@ const landmarkSchema = z.object({
   type: z.enum([
     'room', 'entrance', 'elevator', 'stairs', 'restroom', 'emergency_exit', 'facility', 'other',
     'lecture_hall', 'classroom', 'lab', 'library', 'auditorium', 'department_office',
-    'admissions_office', 'student_union', 'cafeteria', 'bookstore', 'gym', 
+    'admissions_office', 'student_union', 'cafeteria', 'bookstore', 'gym',
     'health_center', 'information_desk'
   ]),
   roomNumber: z.string().max(20).trim().optional()
@@ -87,13 +87,16 @@ const landmarkUpdateSchema = landmarkSchema.partial().extend({
   building: z.string().regex(/^[0-9a-fA-F]{24}$/).optional()
 });
 
-// --- Path Schemas ---
+// --- Path Schemas (CORRECTED ORDER) ---
+
+// 1. Define the accessibility schema for paths FIRST.
 const pathAccessibilitySchema = z.object({
   wheelchairAccessible: z.boolean().default(true),
   requiresElevator: z.boolean().default(false),
   requiresStairs: z.boolean().default(false)
 });
 
+// 2. NOW, define the main path schema which can safely reference the one above.
 const pathSchema = z.object({
   from: z.string().regex(/^[0-9a-fA-F]{24}$/),
   to: z.string().regex(/^[0-9a-fA-F]{24}$/),
@@ -110,7 +113,11 @@ const pathSchema = z.object({
   isBidirectional: z.preprocess(val => val === 'true', z.boolean()).default(true)
 });
 
-const pathUpdateSchema = pathSchema.partial();
+// 3. FINALLY, define the update schema which includes the reverseInstructions field.
+const pathUpdateSchema = pathSchema.partial().extend({
+  reverseInstructions: z.string().min(10).max(500).trim().optional()
+});
+
 
 // --- Navigation Schemas ---
 const navigationRequestSchema = z.object({
