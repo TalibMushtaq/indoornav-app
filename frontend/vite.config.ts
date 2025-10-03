@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
 // https://vitejs.dev/config/
+// THIS CONFIGURATION IS CORRECT FOR LOCAL DEVELOPMENT
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -10,9 +11,9 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       // This will forward any request starting with /api to your backend
       '/api': {
-        target: 'https://indoornav-app.onrender.com', //  The URL of your backend server
-        changeOrigin: true, // Recommended for this setup
-        secure: false,      // Can be false for local http development
+        target: 'https://indoornav-app.onrender.com', // The URL of your backend server
+        changeOrigin: true,
+        secure: false,
       },
     },
   },
