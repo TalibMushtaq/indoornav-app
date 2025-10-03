@@ -8,8 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Trash2, Plus, Upload, CheckCircle2, Loader2 } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { useToast } from '@/components/ui/use-toast';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { apiCallWithAuth } from '@/utils/api'; // ✨ ADDED API UTILITY IMPORT
 
 interface Floor {
   number: string;
@@ -39,9 +38,8 @@ const BuildingForm = () => {
         setIsLoading(true);
         const token = localStorage.getItem('adminToken');
         try {
-          const response = await fetch(`${API_BASE_URL}/api/admin/buildings/${buildingId}`, {
-             headers: { Authorization: `Bearer ${token}` },
-          });
+  
+          const response = await apiCallWithAuth(`/admin/buildings/${buildingId}`, token!);
           if (!response.ok) throw new Error('Failed to fetch building data.');
           const data = await response.json();
           const building = data.data.building;
@@ -114,9 +112,9 @@ const BuildingForm = () => {
       formData.append('image', buildingImage);
     }
     
-    const url = isEditing
-      ? `${API_BASE_URL}/api/admin/buildings/${buildingId}`
-      : `${API_BASE_URL}/api/admin/buildings`;
+    const endpoint = isEditing
+      ? `/admin/buildings/${buildingId}`
+      : `/admin/buildings`;
       
     const method = isEditing ? 'PUT' : 'POST';
 
@@ -131,9 +129,9 @@ const BuildingForm = () => {
     }, 200);
 
     try {
-      const response = await fetch(url, {
+      
+      const response = await apiCallWithAuth(endpoint, token!, {
         method,
-        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
 

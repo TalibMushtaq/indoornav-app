@@ -7,9 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MapPin, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-// Define the API base URL using the environment variable, with a fallback
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { apiPost } from "@/utils/api"; // ✨ ADDED API UTILITY IMPORT
 
 const signupSchema = z.object({
   name: z.string().trim().min(2, { message: "Name must be at least 2 characters" }).max(100),
@@ -45,15 +43,12 @@ const AdminSignup = () => {
     try {
       const validatedData = signupSchema.parse(formData);
       
-      const response = await fetch(`${API_BASE_URL}/api/admin/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: validatedData.name,
-          email: validatedData.email,
-          password: validatedData.password,
-          adminSecret: validatedData.adminSecret
-        })
+      // ✨ UPDATED: Use apiPost instead of fetch
+      const response = await apiPost('/admin/signup', {
+        name: validatedData.name,
+        email: validatedData.email,
+        password: validatedData.password,
+        adminSecret: validatedData.adminSecret
       });
 
       const data = await response.json();

@@ -30,21 +30,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import axios from 'axios';
-import { Loader2 } from 'lucide-react'; // ✨ ADDED: Spinner icon
-
-// --- API Utility ---
-const api = axios.create({
-  baseURL: '/api',
-});
-
-api.interceptors.request.use(config => {
-  const token = localStorage.getItem('adminToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+import { Loader2 } from 'lucide-react';
+import { apiCallWithAuth } from '@/utils/api'; // ✅ Use your existing API utility
 
 // --- Type Definitions ---
 interface Building {
@@ -115,18 +102,18 @@ const AdminPaths = () => {
   const [loading, setLoading] = useState({ buildings: true, paths: false });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPath, setCurrentPath] = useState<PathFormData>(INITIAL_PATH_STATE);
-  // ✨ ADDED: State for tracking form submission status
   const [submissionStatus, setSubmissionStatus] = useState<'idle' | 'processing'>('idle');
+
+  // Get token once
+  const token = localStorage.getItem('adminToken') || '';
 
   // --- Reusable Error Handler ---
   const handleApiError = useCallback((error: unknown, context: string) => {
     let errorMessage = `Failed to ${context}.`;
-    if (axios.isAxiosError(error) && error.response) {
-      console.error(`API Error (${context}):`, error.response.data);
-      errorMessage = error.response.data.message || errorMessage;
-    } else {
-      console.error(`Network/Request Error (${context}):`, error);
+    if (error instanceof Error) {
+      errorMessage = error.message || errorMessage;
     }
+    console.error(`Error (${context}):`, error);
     toast.error(errorMessage);
   }, []);
 
@@ -134,7 +121,11 @@ const AdminPaths = () => {
   const fetchBuildings = useCallback(async () => {
     setLoading(prev => ({ ...prev, buildings: true }));
     try {
-      const { data } = await api.get('/admin/buildings?limit=100');
+      const response = await apiCallWithAuth('/admin/buildings?limit=100', token);
+      if (!response.ok) {
+        throw new Error('Failed to fetch buildings');
+      }
+      const data = await response.json();
       if (data.success) {
         setBuildings(data.data.buildings);
         if (data.data.buildings.length > 0) {
@@ -148,22 +139,26 @@ const AdminPaths = () => {
     } finally {
       setLoading(prev => ({ ...prev, buildings: false }));
     }
-  }, [handleApiError]);
+  }, [handleApiError, token]);
 
   const fetchLandmarks = useCallback(async (buildingId: string) => {
     try {
-      const { data } = await api.get(`/navigation/buildings/${buildingId}/landmarks`);
+      const response = await apiCallWithAuth(`/navigation/buildings/${buildingId}/landmarks`, token);
+      if (!response.ok) throw new Error('Failed to fetch landmarks');
+      const data = await response.json();
       setLandmarks(data.success ? data.data.landmarks || [] : []);
     } catch (error) {
       handleApiError(error, 'fetch landmarks');
       setLandmarks([]);
     }
-  }, [handleApiError]);
+  }, [handleApiError, token]);
 
   const fetchPaths = useCallback(async (buildingId: string) => {
     setLoading(prev => ({ ...prev, paths: true }));
     try {
-      const { data } = await api.get(`/admin/paths?building=${buildingId}&limit=100`);
+      const response = await apiCallWithAuth(`/admin/paths?building=${buildingId}&limit=100`, token);
+      if (!response.ok) throw new Error('Failed to fetch paths');
+      const data = await response.json();
       setPaths(data.success ? data.data.paths || [] : []);
     } catch (error) {
       handleApiError(error, 'fetch paths');
@@ -171,7 +166,7 @@ const AdminPaths = () => {
     } finally {
       setLoading(prev => ({ ...prev, paths: false }));
     }
-  }, [handleApiError]);
+  }, [handleApiError, token]);
 
   // --- Effects ---
   useEffect(() => {
@@ -211,7 +206,6 @@ const AdminPaths = () => {
     setIsModalOpen(true);
   };
 
-  // ✨ UPDATED: handleFormSubmit with new status logic
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmissionStatus('processing');
@@ -226,13 +220,26 @@ const AdminPaths = () => {
       accessibility: JSON.stringify(pathData.accessibility),
     };
 
-    const apiCall = _id
-      ? api.put(`/admin/paths/${_id}`, submissionData)
-      : api.post('/admin/paths', submissionData);
-
     try {
-      const response = await apiCall;
-      toast.success(response.data.message || `Path ${_id ? 'updated' : 'created'} successfully!`);
+      const response = _id
+        ? await apiCallWithAuth(`/admin/paths/${_id}`, token, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(submissionData),
+          })
+        : await apiCallWithAuth('/admin/paths', token, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(submissionData),
+          });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to save path');
+      }
+
+      const result = await response.json();
+      toast.success(result.message || `Path ${_id ? 'updated' : 'created'} successfully!`);
       setIsModalOpen(false);
       if (selectedBuilding) {
         fetchPaths(selectedBuilding);
@@ -247,10 +254,13 @@ const AdminPaths = () => {
   const handleDelete = async (pathId: string) => {
     if (!window.confirm('Are you sure you want to delete this path? This action cannot be undone.')) return;
     try {
-      await api.delete(`/admin/paths/${pathId}`);
+      const response = await apiCallWithAuth(`/admin/paths/${pathId}`, token, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to delete path');
       toast.success('Path deleted successfully!');
       fetchPaths(selectedBuilding);
-    } catch (error: any) {
+    } catch (error) {
       handleApiError(error, 'delete path');
     }
   };
@@ -258,15 +268,20 @@ const AdminPaths = () => {
   const handleStatusChange = async (path: Path) => {
     const newStatus = path.status === 'open' ? 'closed' : 'open';
     try {
-        await api.patch(`/admin/paths/${path._id}/status`, { status: newStatus });
-        toast.success(`Path status updated to ${newStatus}.`);
-        setPaths(prevPaths =>
-            prevPaths.map(p =>
-                p._id === path._id ? { ...p, status: newStatus } : p
-            )
-        );
+      const response = await apiCallWithAuth(`/admin/paths/${path._id}/status`, token, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!response.ok) throw new Error('Failed to update status');
+      toast.success(`Path status updated to ${newStatus}.`);
+      setPaths(prevPaths =>
+        prevPaths.map(p =>
+          p._id === path._id ? { ...p, status: newStatus } : p
+        )
+      );
     } catch (error) {
-        handleApiError(error, 'update path status');
+      handleApiError(error, 'update path status');
     }
   };
 
@@ -311,17 +326,17 @@ const AdminPaths = () => {
                   <TableCell className="font-medium">{path.to.name} (F{path.to.floor})</TableCell>
                   <TableCell className="text-center">{path.distance}</TableCell>
                   <TableCell className="text-center">
-                      <div className="flex items-center justify-center space-x-2">
-                          <Switch
-                              id={`status-${path._id}`}
-                              checked={path.status === 'open'}
-                              onCheckedChange={() => handleStatusChange(path)}
-                              aria-label={`Set path status to ${path.status === 'open' ? 'closed' : 'open'}`}
-                          />
-                           <Label htmlFor={`status-${path._id}`} className="capitalize">
-                              {path.status}
-                          </Label>
-                      </div>
+                    <div className="flex items-center justify-center space-x-2">
+                      <Switch
+                        id={`status-${path._id}`}
+                        checked={path.status === 'open'}
+                        onCheckedChange={() => handleStatusChange(path)}
+                        aria-label={`Set path status to ${path.status === 'open' ? 'closed' : 'open'}`}
+                      />
+                      <Label htmlFor={`status-${path._id}`} className="capitalize">
+                        {path.status}
+                      </Label>
+                    </div>
                   </TableCell>
                   <TableCell className="text-right space-x-2">
                     <Button variant="outline" size="sm" onClick={() => openModalForEdit(path)}>Edit</Button>
@@ -338,10 +353,9 @@ const AdminPaths = () => {
         </Table>
       </div>
 
-      {/* --- MODAL FORM --- */}
       <Dialog open={isModalOpen} onOpenChange={(isOpen) => {
         setIsModalOpen(isOpen);
-        if (!isOpen) setSubmissionStatus('idle'); // ✨ ADDED: Reset status when modal closes
+        if (!isOpen) setSubmissionStatus('idle');
       }}>
         <DialogContent className="sm:max-w-[525px]">
           <DialogHeader>
@@ -353,40 +367,40 @@ const AdminPaths = () => {
           <form onSubmit={handleFormSubmit}>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="from">From Landmark</Label>
-                    <Select name="from" value={currentPath.from} onValueChange={v => setCurrentPath(p => ({...p, from: v}))} required>
-                        <SelectTrigger><SelectValue placeholder="Select starting point" /></SelectTrigger>
-                        <SelectContent>
-                            {landmarks.map(l => <SelectItem key={l._id} value={l._id} disabled={l._id === currentPath.to}>{l.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="to">To Landmark</Label>
-                    <Select name="to" value={currentPath.to} onValueChange={v => setCurrentPath(p => ({...p, to: v}))} required>
-                        <SelectTrigger><SelectValue placeholder="Select destination" /></SelectTrigger>
-                        <SelectContent>
-                            {landmarks.map(l => <SelectItem key={l._id} value={l._id} disabled={l._id === currentPath.from}>{l.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                  </div>
+                <div>
+                  <Label htmlFor="from">From Landmark</Label>
+                  <Select name="from" value={currentPath.from} onValueChange={v => setCurrentPath(p => ({...p, from: v}))} required>
+                    <SelectTrigger><SelectValue placeholder="Select starting point" /></SelectTrigger>
+                    <SelectContent>
+                      {landmarks.map(l => <SelectItem key={l._id} value={l._id} disabled={l._id === currentPath.to}>{l.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="to">To Landmark</Label>
+                  <Select name="to" value={currentPath.to} onValueChange={v => setCurrentPath(p => ({...p, to: v}))} required>
+                    <SelectTrigger><SelectValue placeholder="Select destination" /></SelectTrigger>
+                    <SelectContent>
+                      {landmarks.map(l => <SelectItem key={l._id} value={l._id} disabled={l._id === currentPath.from}>{l.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="distance">Distance (meters)</Label>
-                    <Input id="distance" name="distance" type="number" value={currentPath.distance} onChange={e => setCurrentPath(p => ({...p, distance: parseFloat(e.target.value) || 0}))} required />
-                  </div>
-                   <div>
-                    <Label htmlFor="estimatedTime">Estimated Time (seconds)</Label>
-                    <Input id="estimatedTime" name="estimatedTime" type="number" value={currentPath.estimatedTime} onChange={e => setCurrentPath(p => ({...p, estimatedTime: parseInt(e.target.value, 10) || 0}))} required />
-                  </div>
+                <div>
+                  <Label htmlFor="distance">Distance (meters)</Label>
+                  <Input id="distance" name="distance" type="number" value={currentPath.distance} onChange={e => setCurrentPath(p => ({...p, distance: parseFloat(e.target.value) || 0}))} required />
+                </div>
+                <div>
+                  <Label htmlFor="estimatedTime">Estimated Time (seconds)</Label>
+                  <Input id="estimatedTime" name="estimatedTime" type="number" value={currentPath.estimatedTime} onChange={e => setCurrentPath(p => ({...p, estimatedTime: parseInt(e.target.value, 10) || 0}))} required />
+                </div>
               </div>
                
-               <div className="grid gap-2">
-                  <Label htmlFor="instructions">Instructions (A to B)</Label>
-                  <Textarea id="instructions" name="instructions" value={currentPath.instructions} onChange={e => setCurrentPath(p => ({...p, instructions: e.target.value}))} required minLength={10} />
-                  <p className="text-sm text-muted-foreground">This text will be standardized by AI upon saving. (Min. 10 characters)</p>
+              <div className="grid gap-2">
+                <Label htmlFor="instructions">Instructions (A to B)</Label>
+                <Textarea id="instructions" name="instructions" value={currentPath.instructions} onChange={e => setCurrentPath(p => ({...p, instructions: e.target.value}))} required minLength={10} />
+                <p className="text-sm text-muted-foreground">This text will be standardized by AI upon saving. (Min. 10 characters)</p>
               </div>
 
               {currentPath.isBidirectional && (
@@ -403,11 +417,10 @@ const AdminPaths = () => {
               )}
               
               <div className="flex items-center space-x-2">
-                  <Checkbox id="isBidirectional" name="isBidirectional" checked={currentPath.isBidirectional} onCheckedChange={c => setCurrentPath(p => ({...p, isBidirectional: !!c}))} />
-                  <Label htmlFor="isBidirectional">Path is Bidirectional</Label>
+                <Checkbox id="isBidirectional" name="isBidirectional" checked={currentPath.isBidirectional} onCheckedChange={c => setCurrentPath(p => ({...p, isBidirectional: !!c}))} />
+                <Label htmlFor="isBidirectional">Path is Bidirectional</Label>
               </div>
             </div>
-            {/* ✨ UPDATED: DialogFooter with dynamic button state */}
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} disabled={submissionStatus === 'processing'}>Cancel</Button>
               <Button type="submit" disabled={submissionStatus === 'processing'}>

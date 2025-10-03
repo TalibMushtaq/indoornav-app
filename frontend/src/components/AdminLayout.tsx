@@ -3,8 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { LogOut, LayoutDashboard, Building, MapPin, Route, Users, PanelLeft } from 'lucide-react';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { apiCallWithAuth } from '@/utils/api';
 
 interface Admin {
   id: string;
@@ -37,9 +36,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         return;
       }
       try {
-        const response = await fetch(`${API_BASE_URL}/api/admin/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await apiCallWithAuth('/admin/me', token);
         if (!response.ok) throw new Error('Failed to fetch profile');
         const data = await response.json();
         setAdmin(data.data.admin);

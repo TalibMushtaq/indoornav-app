@@ -10,8 +10,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowLeft, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { apiCall, apiPost } from "@/utils/api";
 
-// Schema without email, with optional address and phone
 const visitorSchema = z.object({
   name: z.string().trim().min(2, { message: "Name must be at least 2 characters" }).max(100),
   phone: z.string().trim().max(20).optional().or(z.literal('')),
@@ -35,14 +35,13 @@ const VisitorRegistration = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if visitor token exists
     const token = localStorage.getItem('visitorToken');
     if (token) setHasToken(true);
 
-    // Fetch buildings
     const fetchBuildings = async () => {
       try {
-        const response = await fetch('/api/buildings/list');
+        // CORRECTED: Path does not include /api
+        const response = await apiCall('/buildings/list');
         if (!response.ok) {
           throw new Error(`Failed to fetch buildings: ${response.status} ${response.statusText}`);
         }
@@ -51,9 +50,8 @@ const VisitorRegistration = () => {
         console.log("Buildings API result:", result);
 
         if (result.success && Array.isArray(result.data)) {
-          // Map backend _id to frontend id
           const mappedBuildings = result.data.map((b: any) => ({
-            id: b._id || b.id,
+            id: b.id, // The backend for this route already provides 'id'
             name: b.name
           }));
           setBuildings(mappedBuildings);
@@ -73,7 +71,6 @@ const VisitorRegistration = () => {
     fetchBuildings();
   }, [toast]);
 
-  // Redirect if token exists
   useEffect(() => {
     if (hasToken) navigate("/navigation");
   }, [hasToken, navigate]);
@@ -86,18 +83,15 @@ const VisitorRegistration = () => {
     try {
       const validatedData = visitorSchema.parse(formData);
 
-      const response = await fetch('/api/visitors/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(validatedData)
-      });
+      // CORRECTED: Path does not include /api
+      const response = await apiPost('/visitors/log', validatedData);
 
       const result = await response.json();
 
       if (!response.ok || !result.success) throw new Error(result.message || 'An unknown error occurred.');
 
       if (result.data?.token) {
-        localStorage.setItem('visitorToken', result.data.token); // store 12-hour token
+        localStorage.setItem('visitorToken', result.data.token);
         setHasToken(true);
       }
 
@@ -133,12 +127,11 @@ const VisitorRegistration = () => {
   };
 
   const handleOptOut = () => {
-    localStorage.removeItem('visitorToken'); // remove token
-    setHasToken(false);                      // show registration form
+    localStorage.removeItem('visitorToken');
+    setHasToken(false);
   };
 
   if (hasToken) {
-    // Show opt-out option if already registered
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <Card className="max-w-md w-full text-center">

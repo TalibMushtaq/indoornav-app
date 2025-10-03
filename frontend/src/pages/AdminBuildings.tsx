@@ -15,8 +15,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import AdminLayout from '../components/AdminLayout';
 import { useToast } from '@/components/ui/use-toast';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { apiCallWithAuth, apiDelete } from '@/utils/api';
 
 interface IBuilding {
   _id: string;
@@ -42,9 +41,7 @@ const AdminBuildings = () => {
   const fetchBuildings = async () => {
     const token = localStorage.getItem('adminToken');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/buildings`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await apiCallWithAuth('/admin/buildings', token);
       if (!response.ok) throw new Error('Failed to fetch buildings.');
       const data = await response.json();
       setBuildings(data.data.buildings);
@@ -63,18 +60,14 @@ const AdminBuildings = () => {
     setBuildingToDelete(building);
     setDeleteDialogOpen(true);
   };
-
+  const token = localStorage.getItem('adminToken');
   const handleDeleteConfirm = async () => {
     if (!buildingToDelete) return;
     
     setIsDeleting(true);
-    const token = localStorage.getItem('adminToken');
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/buildings/${buildingToDelete._id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await apiDelete(`/admin/buildings/${buildingToDelete._id}`,token!);
 
       if (!response.ok) {
         const errData = await response.json();

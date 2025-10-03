@@ -10,8 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { useToast } from "@/components/ui/use-toast";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { apiCallWithAuth } from '@/utils/api';
 
 interface IBuilding {
   _id: string;
@@ -50,9 +49,7 @@ const LandmarkForm = () => {
     const fetchBuildings = async () => {
       const token = localStorage.getItem('adminToken');
       try {
-        const response = await fetch(`${API_BASE_URL}/api/admin/buildings`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await apiCallWithAuth('/admin/buildings', token!);
         if (!response.ok) throw new Error('Could not fetch buildings.');
         const data = await response.json();
         setBuildings(data.data.buildings);
@@ -69,9 +66,7 @@ const LandmarkForm = () => {
         setIsLoading(true);
         const token = localStorage.getItem('adminToken');
         try {
-          const response = await fetch(`${API_BASE_URL}/api/admin/landmarks/${landmarkId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const response = await apiCallWithAuth(`/admin/landmarks/${landmarkId}`, token!);
           if (!response.ok) throw new Error('Failed to fetch landmark data.');
           const data = await response.json();
           const landmark = data.data.landmark;
@@ -146,63 +141,52 @@ const LandmarkForm = () => {
 
     images.forEach(file => formData.append('images', file));
 
-    const url = isEditing
-      ? `${API_BASE_URL}/api/admin/landmarks/${landmarkId}`
-      : `${API_BASE_URL}/api/admin/landmarks`;
-    
+    const endpoint = isEditing
+      ? `/admin/landmarks/${landmarkId}`
+      : `/admin/landmarks`;
+      
     const method = isEditing ? 'PUT' : 'POST';
 
-    const xhr = new XMLHttpRequest();
-    xhr.open(method, url);
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    xhr.timeout = 60000;
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        const percentComplete = Math.round((event.loaded / event.total) * 100);
-        setUploadProgress(percentComplete);
-      }
-    };
-
-    xhr.onload = () => {
-      setIsLoading(false);
-      setUploadProgress(100);
-      if (xhr.status >= 200 && xhr.status < 300) {
-        toast({
-          title: "Success!",
-          description: `Landmark "${name}" has been ${isEditing ? 'updated' : 'created'} successfully.`,
-        });
-        navigate('/admin/landmarks');
-      } else {
-        try {
-          const response = JSON.parse(xhr.responseText);
-          setError(response.message || 'An error occurred during upload.');
-        } catch {
-          setError('An unknown error occurred.');
+    // Progress simulation (similar to BuildingForm)
+    const progressInterval = setInterval(() => {
+      setUploadProgress(prev => {
+        if (prev >= 90) {
+          clearInterval(progressInterval);
+          return 90;
         }
-        setUploadProgress(0);
+        return prev + 10;
+      });
+    }, 200);
+
+    try {
+      const response = await apiCallWithAuth(endpoint, token!, {
+        method,
+        body: formData,
+      });
+
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.message || 'Failed to save landmark.');
       }
-    };
+      
+      toast({
+        title: "Success!",
+        description: `Landmark "${name}" has been ${isEditing ? 'updated' : 'created'}.`
+      });
 
-    xhr.onerror = () => {
-      setIsLoading(false);
-      setError('A network error occurred. Please check your connection.');
+      setTimeout(() => {
+        navigate('/admin/landmarks');
+      }, 500);
+    } catch (err: any) {
+      clearInterval(progressInterval);
+      setError(err.message);
       setUploadProgress(0);
-    };
-    
-    xhr.ontimeout = () => {
+    } finally {
       setIsLoading(false);
-      setError('Upload timed out. The connection may be too slow.');
-      setUploadProgress(0);
-    };
-    
-    xhr.onabort = () => {
-       setIsLoading(false);
-       setError('Upload was cancelled.');
-       setUploadProgress(0);
-    };
-
-    xhr.send(formData);
+    }
   };
 
   return (
@@ -287,9 +271,19 @@ const LandmarkForm = () => {
 
             {isLoading && uploadProgress > 0 && (
               <div className="space-y-2">
-                <Label>Uploading...</Label>
-                <Progress value={uploadProgress} className="w-full" />
-                <p className="text-sm text-muted-foreground text-center">{uploadProgress}%</p>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Uploading...
+                  </span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <div 
+                    className="bg-primary h-full transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
               </div>
             )}
 

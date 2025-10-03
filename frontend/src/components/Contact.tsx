@@ -17,6 +17,7 @@ import {
   CarouselContent,
   CarouselItem,
 } from "@/components/ui/carousel";
+import { apiPost } from "@/utils/api";
 
 const Contact = () => {
   // --- STATE MANAGEMENT ---
@@ -52,14 +53,9 @@ const Contact = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmissionStatus({ loading: true, error: "", success: "" });
-    const API_ENDPOINT = `${import.meta.env.VITE_API_URL}/api/feedback/submit`;
 
     try {
-      const response = await fetch(API_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
+      const response = await apiPost("/feedback/submit", formData);
       const result = await response.json();
       if (!response.ok) {
         throw new Error(result.message || "An error occurred.");

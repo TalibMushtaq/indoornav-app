@@ -16,8 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { apiCallWithAuth, apiDelete } from "@/utils/api";
 
 // Updated interface to include optional images array
 interface ILandmark {
@@ -42,9 +41,7 @@ const AdminLandmarks = () => {
     setLoading(true);
     const token = localStorage.getItem('adminToken');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/landmarks`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await apiCallWithAuth('/admin/landmarks', token);
       if (!response.ok) throw new Error('Failed to fetch landmarks.');
       const data = await response.json();
       setLandmarks(data.data.landmarks);
@@ -58,14 +55,13 @@ const AdminLandmarks = () => {
   useEffect(() => {
     fetchLandmarks();
   }, []);
+  
+ const token = localStorage.getItem('adminToken');
+ const handleDelete = async (landmarkId: string) => {
 
-  const handleDelete = async (landmarkId: string) => {
-    const token = localStorage.getItem('adminToken');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/landmarks/${landmarkId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await apiDelete(`/admin/landmarks/${landmarkId}`,token!);
+      
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.message || 'Failed to delete landmark.');

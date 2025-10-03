@@ -16,10 +16,9 @@ import {
   KeyRound,
   X,
   PlusCircle,
-  Users, // ✨ 1. ICON IMPORTED HERE
+  Users,
 } from 'lucide-react';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { apiCallWithAuth, apiPut } from "@/utils/api";
 
 interface Admin {
   id: string;
@@ -65,17 +64,8 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ admin, onUpdate, on
     setSuccess('');
 
     try {
-      const token = getToken();
-      if (!token) throw new Error('Unauthorized');
-
-      const response = await fetch(`${API_BASE_URL}/api/admin/me`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name, email }),
-      });
+      // CORRECTED: Removed token from the call, as apiPut handles it.
+      const response = await apiPut('/admin/me', { name, email });
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to update profile.');
@@ -159,17 +149,8 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onClose }) =>
     setSuccess('');
 
     try {
-      const token = getToken();
-      if (!token) throw new Error('Unauthorized');
-
-      const response = await fetch(`${API_BASE_URL}/api/admin/change-password`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
+      // CORRECTED: Removed token from the call, as apiPut handles it.
+      const response = await apiPut('/admin/change-password', { currentPassword, newPassword });
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to change password.');
@@ -261,9 +242,8 @@ const AdminDashboard: React.FC = () => {
       if (!token) return logout(navigate);
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/admin/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
+        const response = await apiCallWithAuth('/admin/me', token, {
+          signal: controller.signal
         });
 
         if (!response.ok) throw new Error('Failed to fetch profile');
@@ -291,9 +271,7 @@ const AdminDashboard: React.FC = () => {
       if (!token) return;
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/admin/dashboard`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await apiCallWithAuth('/admin/dashboard', token);
 
         if (response.ok) {
           const data = await response.json();
@@ -337,7 +315,7 @@ const AdminDashboard: React.FC = () => {
         { path: '/admin/buildings', icon: Building, label: 'Buildings' },
         { path: '/admin/landmarks', icon: MapPin, label: 'Landmarks' },
         { path: '/admin/paths', icon: Route, label: 'Paths' },
-        { path: '/admin/visitors', icon: Users, label: 'Visitor Logs' }, // ✨ 2. NEW LINK ADDED HERE
+        { path: '/admin/visitors', icon: Users, label: 'Visitor Logs' },
       ].map((item) => (
         <NavLink
           key={item.path}

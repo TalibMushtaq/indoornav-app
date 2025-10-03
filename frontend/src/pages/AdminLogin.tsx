@@ -7,8 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MapPin, Eye, EyeOff, ArrowLeft, KeyRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { apiPost } from "@/utils/api"; // ✨ ADDED API UTILITY IMPORT
 
 const loginSchema = z.object({
   email: z.string().trim().email({ message: "Invalid email address" }).max(255),
@@ -45,11 +44,8 @@ const AdminLogin = () => {
 
     try {
       const validatedData = loginSchema.parse(loginForm);
-      const response = await fetch(`${API_BASE_URL}/api/admin/signin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(validatedData)
-      });
+      // ✨ UPDATED: Use apiPost instead of fetch
+      const response = await apiPost('/admin/signin', validatedData);
       const data = await response.json();
 
       if (!response.ok) throw new Error(data.message || 'An unknown error occurred.');
@@ -80,11 +76,8 @@ const AdminLogin = () => {
 
       try {
           const validatedData = forgotPasswordSchema.parse(forgotForm);
-          const response = await fetch(`${API_BASE_URL}/api/admin/reset-password`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(validatedData)
-          });
+          // ✨ UPDATED: Use apiPost instead of fetch
+          const response = await apiPost('/admin/reset-password', validatedData);
           const data = await response.json();
 
           if (!response.ok) throw new Error(data.message || 'An unknown error occurred.');

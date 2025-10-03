@@ -6,7 +6,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from '@/components/ui/button';
 import { Users, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-import AdminLayout from '../components/AdminLayout'; // Ensure correct path
+import AdminLayout from '../components/AdminLayout';
+import { apiCallWithAuth } from '@/utils/api'; 
 
 const useAuth = () => ({
   token: localStorage.getItem('adminToken')
@@ -38,9 +39,8 @@ const BuildingVisitors = () => {
         throw new Error('Authentication token not found. Please log in.');
       }
 
-      const response = await fetch('/api/visitors', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      
+      const response = await apiCallWithAuth('/visitors', token);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -62,7 +62,7 @@ const BuildingVisitors = () => {
 
   useEffect(() => {
     fetchVisitors();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, []);
 
   return (
@@ -120,8 +120,8 @@ const BuildingVisitors = () => {
                         <TableCell>
                           <Badge variant="secondary">{visitor.building?.name || 'N/A'}</Badge>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell text-muted-foreground">{visitor.phone || '–'}</TableCell>
-                        <TableCell className="hidden lg:table-cell text-muted-foreground">{visitor.address || '–'}</TableCell>
+                        <TableCell className="hidden md:table-cell text-muted-foreground">{visitor.phone || '—'}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-muted-foreground">{visitor.address || '—'}</TableCell>
                         <TableCell className="text-right text-muted-foreground">
                           {format(new Date(visitor.createdAt), "MMM d, yyyy, h:mm a")}
                         </TableCell>

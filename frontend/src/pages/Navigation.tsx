@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { apiCall, apiPost } from "@/utils/api";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +33,7 @@ import {
   Home,
   ChevronLeft,
   ChevronRight,
-  RefreshCw, // Import RefreshCw icon for reverse button
+  RefreshCw,
 } from "lucide-react";
 
 // ----- Validation Schema -----
@@ -107,10 +108,11 @@ const NavigationPage = () => {
   useEffect(() => {
     const fetchBuildings = async () => {
       try {
-        const res = await fetch(`/api/navigation/buildings?page=1&limit=100`);
+        // CORRECTED: Use the simpler /buildings/list endpoint
+        const res = await apiCall('/buildings/list');
         const data = await res.json();
         if (data.success) {
-          setBuildings(data.data.buildings.map((b: any) => ({ id: b._id, name: b.name })));
+          setBuildings(data.data); // This endpoint returns { id, name } directly
         } else {
           toast({ title: "Error", description: "Failed to fetch buildings", variant: "destructive" });
         }
@@ -127,7 +129,7 @@ const NavigationPage = () => {
     const fetchLandmarks = async () => {
       if (!formData.building) return;
       try {
-        const res = await fetch(`/api/navigation/buildings/${formData.building}/landmarks`);
+        const res = await apiCall(`/navigation/buildings/${formData.building}/landmarks`);
         const data = await res.json();
         if (data.success) {
           setLandmarks(data.data.landmarks);
@@ -148,7 +150,7 @@ const NavigationPage = () => {
     if (field === "building") setFormData(prev => ({ ...prev, from: "", to: "" }));
   };
 
-  // ----- NEW: Refactored Route Calculation Logic -----
+  // ----- Route Calculation Logic -----
   const calculateAndSetRoute = async (routeParams: z.infer<typeof navigationSchema>) => {
     setIsLoading(true);
     setErrors({});
@@ -160,11 +162,7 @@ const NavigationPage = () => {
         return;
       }
 
-      const res = await fetch("/api/navigation/route", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...routeParams, preferences })
-      });
+      const res = await apiPost("/navigation/route", { ...routeParams, preferences });
       const data = await res.json();
 
       if (data.success) {
@@ -180,7 +178,7 @@ const NavigationPage = () => {
     }
   };
 
-  // ----- Updated Handle Submit -----
+  // ----- Handle Submit -----
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -197,17 +195,15 @@ const NavigationPage = () => {
     }
   };
 
-  // ----- NEW: Handle Route Reversal -----
+  // ----- Handle Route Reversal -----
   const handleReverseRoute = async () => {
     if (!route || !formData.from || !formData.to) return;
     
     const newFrom = formData.to;
     const newTo = formData.from;
 
-    // Update the dropdowns visually
     setFormData(prev => ({...prev, from: newFrom, to: newTo}));
     
-    // Recalculate the route with the new values
     await calculateAndSetRoute({
         building: formData.building,
         from: newFrom,
@@ -215,7 +211,7 @@ const NavigationPage = () => {
     });
   };
 
-  // --- NEW NAVIGATION HANDLERS ---
+  // --- NAVIGATION HANDLERS ---
   const handleStartNavigation = () => {
     if (route) {
         setCurrentStepIndex(1);
@@ -300,7 +296,6 @@ const NavigationPage = () => {
                     </div>
                     <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg"><div className="flex items-center space-x-2"><Clock className="h-5 w-5 text-primary" /><span>{Math.round(route.totalTime)} mins</span></div><div className="flex items-center space-x-2"><Route className="h-5 w-5 text-primary" /><span>{Math.round(route.totalDistance)} m</span></div></div>
                     <div className="space-y-3 max-h-48 overflow-y-auto pr-2">{route.steps.map(step => (<Alert key={step.stepNumber} variant="default" className="flex items-center justify-between"><div className="flex items-center space-x-2"><span>{getTypeIcon(step.landmark.type)}</span><div><div className="font-medium">{step.landmark.name}</div><div className="text-sm">{step.instructions}</div></div></div><Badge className={getDifficultyColor(step.difficulty)}>{step.difficulty}</Badge></Alert>))}</div>
-                    {/* ----- UPDATED: Action buttons ----- */}
                     <div className="flex space-x-2 mt-4">
                         <Button className="flex-1" onClick={handleStartNavigation}>Start Navigation</Button>
                         <Button variant="outline" className="flex-1" onClick={handleReverseRoute} disabled={isLoading}>
@@ -329,7 +324,6 @@ const NavigationPage = () => {
                         </div>
 
                         <div className="aspect-video bg-muted rounded-lg flex items-center justify-center overflow-hidden mb-4">
-                            {/* ----- FIX APPLIED HERE ----- */}
                             {currentActiveStep && <img src={getLandmarkImageUrl(currentActiveStep.landmark.images, currentActiveStep.landmark.name)} alt={currentActiveStep.landmark.name} className="w-full h-full object-cover" />}
                         </div>
 
