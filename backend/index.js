@@ -15,7 +15,7 @@ const adminRoutes = require('./routes/admin');
 const navigationRoutes = require('./routes/navigation');
 const visitorRoutes = require('./routes/visitor');
 const feedbackRoutes = require("./routes/feedback");
-const buildingRoutes = require('./routes/buildings'); // ✨ ADDED
+const buildingRoutes = require('./routes/buildings');
 
 // Error handler
 const errorHandler = require('./middlewares/errorHandler');
@@ -23,33 +23,46 @@ const errorHandler = require('./middlewares/errorHandler');
 // Initialize Express app
 const app = express();
 
-// Trust proxy for rate limiting
+// Trust proxy for rate limiting (important for Render)
 app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
-  contentSecurityPolicy: { /* ... existing directives ... */ },
+  contentSecurityPolicy: false, // Disable for API
 }));
 
-// CORS configuration
+// CORS configuration - UPDATED for better deployment support
 const allowedOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(",")
-  : ["http://localhost:8080"];
+  ? process.env.CORS_ORIGINS.split(",").map(origin => origin.trim())
+  : ["http://localhost:8080", "http://localhost:5173", "http://localhost:3000"];
+
+console.log('🔐 Allowed CORS Origins:', allowedOrigins);
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      console.warn(`⚠️  CORS blocked origin: ${origin}`);
+      callback(new Error(`CORS policy: Origin ${origin} is not allowed`));
     }
   },
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 };
+
 app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -65,9 +78,11 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Request logging middleware
+// Request logging middleware - ENHANCED
 app.use((req, res, next) => {
   const start = Date.now();
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} - Origin: ${req.get('origin') || 'none'}`);
+  
   res.on('finish', () => {
     const duration = Date.now() - start;
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`);
@@ -82,7 +97,11 @@ app.get('/', (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
 
 // API routes
@@ -94,7 +113,18 @@ app.use('/api/buildings', buildingRoutes);
 
 // API documentation endpoint
 app.get('/api', (req, res) => {
-  res.json({ message: 'Welcome to the Indoor Navigation API' });
+  res.json({ 
+    message: 'Welcome to the Indoor Navigation API',
+    version: '1.0.0',
+    endpoints: {
+      admin: '/api/admin',
+      navigation: '/api/navigation',
+      visitors: '/api/visitors',
+      feedback: '/api/feedback',
+      buildings: '/api/buildings',
+      health: '/health'
+    }
+  });
 });
 
 // Handle 404 for API routes
@@ -102,6 +132,7 @@ app.use('/api', (req, res) => {
   res.status(404).json({
     success: false,
     message: 'API endpoint not found',
+    requestedPath: req.originalUrl,
     availableEndpoints: ['/api/navigation', '/api/admin', '/api/visitors', '/api/feedback', '/api/buildings']
   });
 });
@@ -118,7 +149,7 @@ const startServer = async () => {
     await checkS3Connection();
     // 3. Start the Express server
     const PORT = process.env.PORT || 5000;
-    const HOST = '0.0.0.0'; // Important for Elastic Beanstalk
+    const HOST = '0.0.0.0'; // Important for Render/cloud deployments
     app.listen(PORT, HOST, () => {
       console.log(`
 🚀 Indoor Navigation Server Started Successfully!
@@ -126,6 +157,7 @@ const startServer = async () => {
 📍 Port: ${PORT}
 🌍 Environment: ${process.env.NODE_ENV || 'development'}
 🔗 API Base: http://${HOST}:${PORT}/api
+🔐 CORS Origins: ${allowedOrigins.join(', ')}
       `);
     });
   } catch (error) {
