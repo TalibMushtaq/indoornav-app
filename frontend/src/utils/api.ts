@@ -48,9 +48,12 @@ export const apiPost = async (endpoint: string, data: any): Promise<Response> =>
  */
 export const apiPut = async (
   endpoint: string,
-  token: string,
   data: any
 ): Promise<Response> => {
+  const token = localStorage.getItem('adminToken');
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
   return apiCallWithAuth(endpoint, token, {
     method: 'PUT',
     headers: {
