@@ -1,5 +1,5 @@
 const express = require('express');
-const fetch = require('node-fetch'); // Make sure you have 'node-fetch' installed
+const fetch = require('node-fetch');
 const { Admin, Building, Landmark, Path, NavigationHistory } = require('../database');
 const { authenticate, requireAdmin, authLimiter, generateToken } = require('../middlewares/auth');
 const { upload, deleteFromS3 } = require('../middlewares/awsupload');
@@ -434,11 +434,10 @@ async function processInstructionsWithAI(text, mode, fromLandmarkName, toLandmar
   const API_KEY = process.env.GOOGLE_GEMINI_API_KEY;
   if (!API_KEY) {
     console.warn("Google Gemini API Key not configured. Using original text.");
-    return text; // Fallback to original text
+    return text;
   }
   
-  // Updated the model name based on user's snippet
-  const API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+  const API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`;
 
   let prompt = '';
   if (mode === 'standardize') {
@@ -486,8 +485,6 @@ OUTPUT ONLY THE REVERSED INSTRUCTIONS. NO EXTRA TEXT.`;
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // FIXED: Removed the invalid "system" role from the contents array.
-      // The new error "Please use a valid role: user, model" indicates the "system" role is not supported.
       body: JSON.stringify({ 
         contents: [
           {
@@ -508,7 +505,6 @@ OUTPUT ONLY THE REVERSED INSTRUCTIONS. NO EXTRA TEXT.`;
       const errorBody = await response.text();
       console.error('Gemini API Error:', response.status, errorBody);
       
-      // Handle specific API errors
       if (response.status === 429) {
         console.warn('AI API rate limit reached. Using original text.');
         return text;
@@ -530,19 +526,16 @@ OUTPUT ONLY THE REVERSED INSTRUCTIONS. NO EXTRA TEXT.`;
     const candidate = data.candidates[0];
     let result = null;
 
-    // Check for token limit issue first
     if (candidate.finishReason === 'MAX_TOKENS') {
       console.warn(`AI hit MAX_TOKENS limit for ${mode} mode. Using original text.`);
       return text;
     }
 
-    // Handle safety/content filtering
     if (candidate.finishReason === 'SAFETY' || candidate.finishReason === 'RECITATION') {
       console.warn(`AI filtered content due to ${candidate.finishReason}. Using original text.`);
       return text;
     }
 
-    // Extract text from response
     if (candidate.content && candidate.content.parts && candidate.content.parts[0]?.text) {
       result = candidate.content.parts[0].text;
     } else if (candidate.output) {
@@ -551,27 +544,25 @@ OUTPUT ONLY THE REVERSED INSTRUCTIONS. NO EXTRA TEXT.`;
 
     if (!result) {
       console.warn("AI response missing text content. Using original text.");
-      console.error("Full AI response:", JSON.stringify(data, null, 2));
       return text;
     }
 
-    // Clean up response
     result = result.trim();
     result = result.replace(/^(Here are the|Here's the|The) (rewritten|reversed) instructions?:?\s*/i, '');
     result = result.replace(/^Instructions?:?\s*/i, '');
-    result = result.replace(/```.*?\n?/g, ''); // Remove code blocks
+    result = result.replace(/```.*?\n?/g, '');
     
-    return result || text; // Fallback if result becomes empty after cleaning
+    return result || text;
     
   } catch (error) {
-    // Network errors, timeouts, etc.
     console.error(`Error in processInstructionsWithAI (${mode} mode):`, error.message);
     console.warn('AI processing failed. Using original text as fallback.');
-    return text; // Always return original text on any error
+    return text;
   }
 }
+
 // ===============================
-// PATH MANAGEMENT (UPDATED ROUTE)
+// PATH MANAGEMENT
 // ===============================
 
 router.get('/paths', validateQuery(paginationSchema.merge(searchSchema)), async (req, res) => {
@@ -630,15 +621,11 @@ router.get('/paths', validateQuery(paginationSchema.merge(searchSchema)), async 
   }
 });
 
-// ===============================
-// PATH CREATION WITH IMPROVED ERROR HANDLING
-// ===============================
 router.post('/paths', validate(pathSchema), async (req, res) => {
   try {
     const { from, to, isBidirectional, instructions, ...rest } = req.body;
     const createdBy = req.user._id;
 
-    // Validation checks
     if (from === to) {
       return res.status(400).json({ 
         success: false, 
@@ -676,7 +663,6 @@ router.post('/paths', validate(pathSchema), async (req, res) => {
       });
     }
 
-    // AI Processing with automatic fallback
     console.log("Processing instructions with AI...");
     let standardizedInstructions = instructions;
     let generatedReverseInstructions = null;
@@ -690,7 +676,6 @@ router.post('/paths', validate(pathSchema), async (req, res) => {
         toLandmark.name
       );
       
-      // Check if AI actually processed it (not just fallback)
       if (processed !== instructions) {
         standardizedInstructions = processed;
         aiUsed.standardize = true;
@@ -736,7 +721,6 @@ router.post('/paths', validate(pathSchema), async (req, res) => {
       { path: 'to', select: 'name floor' }
     ]);
 
-    // Inform user about AI processing status
     let message = 'Path created successfully.';
     if (aiUsed.standardize && aiUsed.reverse) {
       message += ' AI enhanced both instructions.';
@@ -814,7 +798,6 @@ router.delete('/paths/:id', async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error deleting path.' });
   }
 });
-
 
 // ===============================
 // DASHBOARD & ANALYTICS
