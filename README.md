@@ -307,7 +307,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Documentation**: [Project Wiki](https://github.com/yourusername/indoornav-app/wiki)
 - **Issues**: [GitHub Issues](https://github.com/yourusername/indoornav-app/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/indoornav-app/discussions)
 - **Email**: support@naviguide.app
 
 ---
