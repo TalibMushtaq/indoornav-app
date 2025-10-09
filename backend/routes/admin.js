@@ -437,7 +437,7 @@ async function processInstructionsWithAI(text, mode, fromLandmarkName, toLandmar
     return text;
   }
   
-  const API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`;
+  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
 
   let prompt = '';
   if (mode === 'standardize') {
@@ -621,11 +621,15 @@ router.get('/paths', validateQuery(paginationSchema.merge(searchSchema)), async 
   }
 });
 
+// ===============================
+// AI-POWERED PATH CREATION
+// ===============================
 router.post('/paths', validate(pathSchema), async (req, res) => {
   try {
     const { from, to, isBidirectional, instructions, ...rest } = req.body;
     const createdBy = req.user._id;
 
+    // === VALIDATION ===
     if (from === to) {
       return res.status(400).json({ 
         success: false, 
@@ -633,117 +637,168 @@ router.post('/paths', validate(pathSchema), async (req, res) => {
       });
     }
 
+    // Fetch landmarks in parallel for better performance
     const [fromLandmark, toLandmark] = await Promise.all([
-      Landmark.findOne({ _id: from, createdBy }),
-      Landmark.findOne({ _id: to, createdBy })
+      Landmark.findOne({ _id: from, createdBy }).lean(),
+      Landmark.findOne({ _id: to, createdBy }).lean()
     ]);
 
     if (!fromLandmark || !toLandmark) {
       return res.status(404).json({ 
         success: false, 
-        message: 'One or both landmarks not found.' 
+        message: 'One or both landmarks not found or you do not have access.' 
       });
     }
 
+    // Ensure same building
     if (fromLandmark.building.toString() !== toLandmark.building.toString()) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Landmarks must be in the same building.' 
+        message: 'Both landmarks must be in the same building.' 
       });
     }
 
+    // Check for existing path (bidirectional check)
     const existingPath = await Path.findOne({ 
-      $or: [{ from, to }, { from: to, to: from }] 
-    });
+      $or: [
+        { from, to },
+        { from: to, to: from }
+      ]
+    }).lean();
     
     if (existingPath) {
       return res.status(400).json({ 
         success: false, 
-        message: 'A path between these two landmarks already exists.' 
+        message: 'A path between these landmarks already exists.' 
       });
     }
 
-    console.log("Processing instructions with AI...");
-    let standardizedInstructions = instructions;
-    let generatedReverseInstructions = null;
-    let aiUsed = { standardize: false, reverse: false };
+    // === AI PROCESSING ===
+    console.log(`[AI] Processing path: ${fromLandmark.name} → ${toLandmark.name}`);
+    
+    let forwardInstructions = instructions;
+    let reverseInstructions = null;
+    const aiStatus = {
+      forward: { attempted: true, success: false, enhanced: false },
+      reverse: { attempted: false, success: false, enhanced: false }
+    };
 
+    // Step 1: Enhance forward instructions
     try {
-      const processed = await processInstructionsWithAI(
+      const enhanced = await processInstructionsWithAI(
         instructions,
         'standardize',
         fromLandmark.name,
         toLandmark.name
       );
       
-      if (processed !== instructions) {
-        standardizedInstructions = processed;
-        aiUsed.standardize = true;
+      // Only use AI result if it's meaningfully different
+      if (enhanced && enhanced.trim() !== instructions.trim() && enhanced.length > 10) {
+        forwardInstructions = enhanced;
+        aiStatus.forward.success = true;
+        aiStatus.forward.enhanced = true;
+        console.log('[AI] ✅ Forward instructions enhanced');
+      } else {
+        console.log('[AI] ⚠️ Forward enhancement returned similar/empty result, keeping original');
       }
     } catch (error) {
-      console.warn('Standardization failed, using original:', error.message);
-      standardizedInstructions = instructions;
+      console.warn('[AI] ❌ Forward enhancement failed:', error.message);
     }
 
+    // Step 2: Generate reverse instructions (only if bidirectional)
     if (isBidirectional) {
+      aiStatus.reverse.attempted = true;
+      
       try {
         const reversed = await processInstructionsWithAI(
-          instructions,
+          forwardInstructions,  // ✅ Use ENHANCED instructions
           'reverse',
           fromLandmark.name,
           toLandmark.name
         );
         
-        if (reversed !== instructions) {
-          generatedReverseInstructions = reversed;
-          aiUsed.reverse = true;
+        // Validate reverse instructions quality
+        if (reversed && reversed.trim().length > 10) {
+          reverseInstructions = reversed;
+          aiStatus.reverse.success = true;
+          aiStatus.reverse.enhanced = true;
+          console.log('[AI] ✅ Reverse instructions generated from enhanced version');
+        } else {
+          console.log('[AI] ⚠️ Reverse generation returned empty/invalid result');
         }
       } catch (error) {
-        console.warn('Reverse generation failed:', error.message);
-        generatedReverseInstructions = null;
+        console.warn('[AI] ❌ Reverse generation failed:', error.message);
       }
     }
 
+    // === DATABASE SAVE ===
     const pathData = { 
       from, 
       to, 
       isBidirectional, 
       createdBy, 
-      ...rest, 
-      instructions: standardizedInstructions, 
-      reverseInstructions: generatedReverseInstructions 
+      ...rest,
+      instructions: forwardInstructions,
+      reverseInstructions: isBidirectional ? reverseInstructions : undefined
     };
 
     const path = new Path(pathData);
     await path.save();
+    
+    // Populate landmarks for response
     await path.populate([
-      { path: 'from', select: 'name floor' }, 
-      { path: 'to', select: 'name floor' }
+      { path: 'from', select: 'name floor type' }, 
+      { path: 'to', select: 'name floor type' }
     ]);
 
-    let message = 'Path created successfully.';
-    if (aiUsed.standardize && aiUsed.reverse) {
-      message += ' AI enhanced both instructions.';
-    } else if (aiUsed.standardize) {
-      message += ' AI enhanced forward instructions.';
-    } else if (aiUsed.reverse) {
-      message += ' AI enhanced reverse instructions.';
+    // === RESPONSE MESSAGE ===
+    let message = 'Path created successfully';
+    const enhancements = [];
+    
+    if (aiStatus.forward.enhanced) {
+      enhancements.push('forward instructions enhanced');
+    }
+    if (aiStatus.reverse.enhanced) {
+      enhancements.push('reverse instructions auto-generated');
+    }
+    
+    if (enhancements.length > 0) {
+      message += ` with AI: ${enhancements.join(' and ')}.`;
+    } else if (aiStatus.forward.attempted || aiStatus.reverse.attempted) {
+      message += '. (AI processing unavailable - original instructions saved)';
     } else {
-      message += ' (AI unavailable - saved original instructions)';
+      message += '.';
     }
 
     res.status(201).json({ 
       success: true, 
       message,
-      data: { path },
-      aiProcessing: aiUsed
+      data: { 
+        path,
+        aiProcessing: {
+          forward: aiStatus.forward,
+          reverse: aiStatus.reverse,
+          usedEnhancedForReverse: aiStatus.forward.enhanced && aiStatus.reverse.success
+        }
+      }
     });
 
   } catch (error) {
-    console.error('Path creation error:', error);
+    console.error('[PATH_CREATE_ERROR]', error);
+    
+    // Better error handling
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid path data',
+        errors: Object.values(error.errors).map(e => e.message)
+      });
+    }
+    
     res.status(500).json({ 
       success: false, 
-      message: 'Server error creating path. Please try again.' 
+      message: 'Server error creating path. Please try again.',
+      ...(process.env.NODE_ENV === 'development' && { error: error.message })
     });
   }
 });
